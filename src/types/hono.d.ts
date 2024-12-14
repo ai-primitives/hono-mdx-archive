@@ -56,17 +56,20 @@ declare module 'hono/jsx' {
 declare module 'hono' {
   import type { ComponentType } from 'react'
   import type { JSXNode, Children, HonoComponent } from 'hono/jsx'
-
-  export class Hono<E = {}> {
-    use(path: string, middleware: (c: Context<E>, next: Next) => Promise<void>): this
-    get(path: string, handler: (c: Context<E>) => Response | Promise<Response>): this
-  }
+  import type { Env } from '@hono/types'
 
   export interface Context<E = {}> {
+    req: Request
+    env: E
     jsx: {
       (node: JSXNode): Response
       (type: string | Function | ComponentType, props: Record<string, any>, children?: Children): Response
     }
+  }
+
+  export class Hono<E = {}> {
+    use(path: string, middleware: (c: Context<E>, next: Next) => Promise<void>): this
+    get(path: string, handler: (c: Context<E>) => Response | Promise<Response>): this
   }
 
   export type Next = () => Promise<void>

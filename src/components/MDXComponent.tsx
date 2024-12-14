@@ -17,16 +17,20 @@ interface MDXModule {
 async function compileMDX(source: string | Promise<string>) {
   try {
     const resolvedSource = await Promise.resolve(source)
-    return String(
-      await compile(resolvedSource, {
-        jsx: true,
-        jsxImportSource: 'hono/jsx',
-        development: false,
-        pragma: 'jsx',
-        pragmaFrag: 'Fragment'
-      })
-    )
+    console.log('Compiling MDX source:', resolvedSource)
+    const result = await compile(resolvedSource, {
+      jsx: true,
+      jsxImportSource: 'hono/jsx',
+      development: true, // Enable development mode for better error messages
+      pragma: 'jsx',
+      pragmaFrag: 'Fragment',
+      remarkPlugins: [],
+      rehypePlugins: []
+    })
+    console.log('Compilation result:', String(result))
+    return String(result)
   } catch (error) {
+    console.error('MDX Compilation Error:', error)
     throw new MDXCompilationError(`Failed to compile MDX: ${error}`, typeof source === 'string' ? source : 'async content')
   }
 }
@@ -72,7 +76,7 @@ export const MDXComponent = ({ source, components }: MDXComponentProps): JSXNode
 }
 
 export function mdx() {
-  return async (c: Context, next: Next) => {
+  return async function mdxMiddleware(c: Context, next: Next) {
     const originalJsx = c.jsx
 
     c.jsx = ((component: any, props?: any, children?: any) => {

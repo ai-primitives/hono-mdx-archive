@@ -1,15 +1,15 @@
 import { jsx } from 'hono/jsx'
 import { Hono } from 'hono'
-import type { MiddlewareHandler } from 'hono/types'
+import type { Context, Next } from 'hono'
 import { MDXComponent, Suspense, mdx } from '../'
 import { MDXCompilationError, MDXRenderError } from '../utils/errors'
 
-type Env = {
-  // Add any Cloudflare Worker bindings here
+interface Env {
+  // Cloudflare Worker bindings
 }
 
-type Variables = {
-  // Add any middleware variables here
+interface Variables {
+  // Middleware variables
 }
 
 type AppType = {
@@ -19,13 +19,12 @@ type AppType = {
 
 const app = new Hono<AppType>()
 
-// Add middleware with proper types
-const loggerMiddleware: MiddlewareHandler<AppType> = async (c, next) => {
-  console.log(`[${c.req.method}] ${c.req.url}`)
+// Add middleware
+app.use('*', async (c: Context<AppType>, next: Next) => {
+  console.log(`[${new Date().toISOString()}] Request: ${c.req.method} ${c.req.url}`)
   await next()
-}
+})
 
-app.use('*', loggerMiddleware)
 app.use('*', mdx())
 
 const mdxContent = `
