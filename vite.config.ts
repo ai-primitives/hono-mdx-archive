@@ -27,8 +27,7 @@ export default defineConfig({
       output: {
         format: 'es',
         entryFileNames: '[name].js',
-        chunkFileNames: '[name]-[hash].js',
-        inlineDynamicImports: true
+        chunkFileNames: '[name]-[hash].js'
       }
     }
   },
