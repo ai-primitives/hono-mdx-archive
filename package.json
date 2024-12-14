@@ -34,6 +34,7 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
+    "esbuild-wasm": "^0.24.0",
     "hono": "^3.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
