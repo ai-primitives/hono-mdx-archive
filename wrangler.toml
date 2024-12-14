@@ -1,0 +1,6 @@
+name = "hono-mdx-example"
+main = "src/examples/worker.ts"
+compatibility_date = "2024-01-01"
+
+[build]
+command = "npm run build"
