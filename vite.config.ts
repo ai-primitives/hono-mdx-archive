@@ -1,24 +1,26 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import mdx from '@mdx-js/rollup'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    mdx({
+      remarkPlugins: [remarkGfm],
+      rehypePlugins: [rehypeHighlight]
+    }),
+    react()
+  ],
   build: {
+    target: 'esnext',
     lib: {
       entry: 'src/index.ts',
-      name: 'HonoMDX',
-      formats: ['es', 'umd'],
-      fileName: (format) => `hono-mdx.${format}.js`
+      formats: ['es'],
+      fileName: 'index'
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'hono'],
-      output: {
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
-          hono: 'Hono'
-        }
-      }
+      external: ['react', 'react-dom', 'hono']
     }
   }
 })
