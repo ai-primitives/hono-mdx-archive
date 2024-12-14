@@ -15,12 +15,24 @@ export default defineConfig({
   build: {
     target: 'esnext',
     lib: {
-      entry: 'src/index.ts',
+      entry: {
+        index: 'src/index.ts',
+        worker: 'src/examples/worker.ts'
+      },
       formats: ['es'],
-      fileName: 'index'
+      fileName: (format, entryName) => `${entryName}.js`
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'hono']
+      external: ['react', 'react-dom'],
+      output: {
+        format: 'es',
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name]-[hash].js',
+        inlineDynamicImports: true
+      }
     }
+  },
+  optimizeDeps: {
+    include: ['@mdx-js/mdx', 'hono']
   }
 })
