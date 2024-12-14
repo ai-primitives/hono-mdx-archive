@@ -13,6 +13,41 @@ A powerful MDX runtime for Cloudflare Workers for Platforms, built on Hono's JSX
 - Monaco editor for MDX editing
 - Dual storage support: Cloudflare Workers KV and Clickhouse
 
+## Example
+
+```mdx
+---
+title: hono-mdx: High-Performance MDX Runtime for Cloudflare Workers
+description: Build dynamic MDX applications with Hono's JSX renderer, featuring Suspense, streaming, and seamless deployment to Cloudflare Workers
+---
+
+<Hero
+  headline="Transform Your MDX Content into Dynamic Web Applications"
+  description="Build, deploy, and scale MDX applications with enterprise-grade performance using Hono's JSX renderer and Cloudflare Workers"
+/>
+
+<Features
+  items={[
+    {
+      title: 'Server-Side Rendering',
+      description: 'Lightning-fast MDX rendering with Hono's built-in JSX renderer'
+    },
+    {
+      title: 'Streaming & Suspense',
+      description: 'Real-time content updates with async streaming capabilities'
+    },
+    {
+      title: 'Client-Side Hydration',
+      description: 'Seamless client-side interactivity with React components'
+    },
+    {
+      title: 'Enterprise Storage',
+      description: 'Flexible storage options with Workers KV and Clickhouse'
+    }
+  ]}
+/>
+```
+
 ## Installation
 
 ```bash
