@@ -20,7 +20,10 @@ async function compileMDX(source: string | Promise<string>) {
     return String(
       await compile(resolvedSource, {
         jsx: true,
-        jsxImportSource: 'react'
+        jsxImportSource: 'hono/jsx',
+        development: false,
+        pragma: 'jsx',
+        pragmaFrag: 'Fragment'
       })
     )
   } catch (error) {
@@ -34,7 +37,9 @@ export async function createMDXComponent(source: string | Promise<string>, compo
   const scope = {
     jsx,
     components,
-    Fragment: { type: 'fragment' }
+    Fragment: { type: 'fragment' },
+    jsxDEV: jsx,
+    jsxs: jsx
   }
 
   try {
@@ -42,6 +47,8 @@ export async function createMDXComponent(source: string | Promise<string>, compo
     const mod = fn(...Object.values(scope)) as MDXModule
     return mod.default
   } catch (error) {
+    console.error('MDX Render Error:', error)
+    console.debug('Compiled Code:', code)
     throw new MDXRenderError(`Failed to render MDX component: ${error}`, typeof source === 'string' ? source : 'async content')
   }
 }
@@ -50,38 +57,47 @@ export const Suspense = ({ children, fallback }: { children: JSXNode | JSXNode[]
   return jsx('suspense', { fallback: fallback || jsx('div', {}, ['Loading...']) }, children)
 }
 
-export const MDXComponent = ({ source, components }: { source: string | Promise<string>; components?: Record<string, ComponentType> }): JSXNode => {
+export const MDXComponent = ({ source, components }: MDXComponentProps): JSXNode => {
   const promise = createMDXComponent(source, components)
-  return jsx('div', { 'data-mdx': true }, [promise.then(Content => jsx(Content as any, { components }))])
+  return jsx('div', { 'data-mdx': true }, [
+    promise.then(Content => {
+      try {
+        return jsx(Content as any, { components })
+      } catch (error) {
+        console.error('Error rendering MDX content:', error)
+        return jsx('div', { 'data-error': true }, ['Error rendering MDX content'])
+      }
+    })
+  ])
 }
 
 export function mdx() {
   return async (c: Context, next: Next) => {
-    const originalJsx = c.jsx.bind(c)
+    const originalJsx = c.jsx
 
     c.jsx = ((component: any, props?: any, children?: any) => {
       if (arguments.length === 1) {
         if (component?.type === 'suspense') {
           const { fallback, children: suspenseChildren } = component.props
           if (suspenseChildren instanceof Promise) {
-            return originalJsx('div', { 'data-suspense': true }, [
+            return originalJsx.call(c, 'div', { 'data-suspense': true }, [
               fallback,
               suspenseChildren.then((resolved: any) => {
                 try {
-                  return originalJsx(resolved)
+                  return originalJsx.call(c, resolved, {}, [])
                 } catch (error) {
                   console.error('Error in suspense resolution:', error)
-                  return originalJsx('div', { 'data-error': true }, ['Error loading content'])
+                  return originalJsx.call(c, 'div', { 'data-error': true }, ['Error loading content'])
                 }
               })
             ])
           }
-          return originalJsx('div', { 'data-suspense': true }, [suspenseChildren])
+          return originalJsx.call(c, 'div', { 'data-suspense': true }, [suspenseChildren])
         }
-        return originalJsx(component)
+        return originalJsx.call(c, component, {}, [])
       }
 
-      return originalJsx(component, props, children)
+      return originalJsx.call(c, component, props || {}, Array.isArray(children) ? children : children ? [children] : [])
     }) as Context['jsx']
 
     await next()
