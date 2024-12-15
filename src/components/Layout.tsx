@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import type { FC } from 'hono/jsx'
 
-export const Layout: FC = ({ children }) => {
+const Layout: FC = ({ children }) => {
   return (
     <html>
       <head>
@@ -21,3 +21,5 @@ export const Layout: FC = ({ children }) => {
     </html>
   )
 }
+
+export default Layout

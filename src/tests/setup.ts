@@ -47,27 +47,28 @@ const app = new Hono()
 app.use('*', jsxRenderer({
   docType: true,
   jsx: (type: any, props: any, ...children: any[]) => {
-    // Handle function components directly
     if (typeof type === 'function') {
       const flatChildren = children.flat()
-      return type({ ...props, children: flatChildren.length === 1 ? flatChildren[0] : flatChildren })
+      return type({
+        ...props,
+        children: flatChildren.length === 1 ? flatChildren[0] : flatChildren
+      })
     }
-    // Handle JSX elements
     return jsx(type, props, ...children)
   }
 }))
 
 // Create test handler for JSX rendering
-app.get('*', (c) => {
+app.get('*', async (c) => {
   const { component: Component, props } = c.get('test-context') || {}
-  if (!Component) return c.render(null)
+  if (!Component) return c.text('')
 
   try {
     const element = jsx(Component, props || {})
     return c.render(element)
   } catch (error) {
     console.error('Error rendering component:', error)
-    return c.render(null)
+    return c.text('')
   }
 })
 
@@ -82,6 +83,7 @@ export const setTestContext = (component: FC, props?: any) => ({
     if (key === 'test-context') {
       return { component, props }
     }
+    return undefined
   }
 })
 

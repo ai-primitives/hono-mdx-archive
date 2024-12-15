@@ -1,9 +1,11 @@
+/** @jsxImportSource hono/jsx */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { jsx } from 'hono/jsx'
 import { Suspense } from 'hono/jsx'
-import { Layout } from '../components/Layout'
+import Layout from '../components/Layout'
 import { MDXComponent } from '../components/MDXComponent'
 import { testApp, setTestContext } from './setup'
+import type { FC } from 'hono/jsx'
 
 // Mock MDX compilation
 vi.mock('../utils/mdx', () => ({
@@ -18,9 +20,10 @@ describe('Styling Integration', () => {
   })
 
   it('should include PicoCSS and Tailwind in Layout', async () => {
+    const TestContent: FC = () => jsx('div', {}, 'Test Content')
     const res = await testApp.request('/', {
       ...setTestContext(Layout, {
-        children: jsx('div', {}, 'Test Content')
+        children: jsx(TestContent, {})
       })
     })
 
@@ -45,14 +48,15 @@ describe('Styling Integration', () => {
 
   it('should support streaming render with Suspense', async () => {
     const mdxContent = '# Hello World'
-    const stream = await testApp.request('/', {
+    const res = await testApp.request('/', {
       ...setTestContext(Layout, {
         children: jsx(Suspense, { fallback: 'Loading...' },
           jsx(MDXComponent, { source: mdxContent })
         )
       })
-    }).then(res => res.body)
+    })
 
+    const stream = res.body
     const chunks: string[] = []
     const reader = stream.getReader()
     while (true) {
