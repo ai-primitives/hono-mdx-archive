@@ -1,5 +1,8 @@
 import { vi } from 'vitest'
 import { jsx } from 'hono/jsx'
+import { compile } from '@mdx-js/mdx'
+import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -30,6 +33,24 @@ Object.defineProperty(global, 'crypto', {
   writable: true
 })
 
+// Set up MDX compilation
+global.compileMDX = async (source: string) => {
+  try {
+    const result = await compile(source, {
+      jsx: true,
+      jsxImportSource: 'hono/jsx',
+      development: false,
+      outputFormat: 'function-body',
+      remarkPlugins: [remarkGfm],
+      rehypePlugins: [[rehypeRaw, { passThrough: ['mdxJsxFlowElement', 'mdxJsxTextElement'] }]]
+    })
+    return result.toString()
+  } catch (error) {
+    console.error('MDX Compilation Error:', error)
+    throw error
+  }
+}
+
 // Mock Hono's JSX runtime
 const Fragment = Symbol('Fragment')
 
@@ -42,6 +63,16 @@ const jsxRuntime = {
       type,
       props: props || {},
       children: children.flat()
+    }
+  },
+  jsxs: (type: any, props: any) => {
+    if (typeof type === 'function') {
+      return type(props)
+    }
+    return {
+      type,
+      props: props || {},
+      children: props?.children || []
     }
   },
   Fragment,

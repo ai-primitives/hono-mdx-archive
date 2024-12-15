@@ -41,18 +41,18 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
       const _components = arguments[1] || {};
       const _jsx = _runtime.jsx;
       const _Fragment = _runtime.Fragment;
-      const _jsxs = (type, props, ...children) => _jsx(type, { ...props, children });
+      const _jsxs = _runtime.jsxs || ((type, props, ...children) => _jsx(type, { ...props, children }));
 
-      function _createMdxContent(props) {
+      const MDXContent = (props) => {
         const { components: _components } = props;
         return (() => {
           ${compiledCode}
-          return typeof MDXContent === 'function' ? MDXContent(props) : null;
+          return typeof MDXContent === 'function' ? MDXContent({ ...props, components: _components }) : null;
         })();
-      }
+      };
 
       return function MDXComponent(props) {
-        return _createMdxContent({
+        return MDXContent({
           ...props,
           components: { ..._components, ...props.components }
         });
@@ -60,7 +60,11 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
     `
 
     const createComponent = new Function('runtime', 'components', moduleCode)
-    const Component = createComponent({ jsx, Fragment: Symbol('Fragment') }, components)
+    const Component = createComponent({
+      jsx,
+      Fragment: Symbol('Fragment'),
+      jsxs: (type: any, props: any) => jsx(type, { ...props })
+    }, components)
     return Component
   } catch (error) {
     console.error('MDX Compilation Error:', error)
@@ -92,7 +96,8 @@ export const MDXComponent = ({ source, components = {} }: MDXComponentProps): JS
       'data-mdx': true,
       id: 'mdx-root',
       className: 'prose container',
-      'data-hydrate': shouldHydrate
+      'data-hydrate': shouldHydrate,
+      'data-source': typeof source === 'string' ? source : undefined
     }, [
       jsx(ErrorBoundary, {}, [
         jsx(Suspense, {
