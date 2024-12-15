@@ -1,9 +1,8 @@
 import type { HtmlEscapedString } from 'hono/utils/html'
-import type { JSXNode } from 'hono/jsx'
+import type { JSXNode, Child } from 'hono/jsx'
 
 type JSXChild = JSXNode | string | HtmlEscapedString | Promise<any>
 type JSXChildren = JSXChild | JSXChild[]
-type JSXChildArray = Array<JSXChild>
 
 export const Suspense = ({ fallback, children }: { fallback: JSXChild; children: JSXChildren }) => {
   if (children && typeof children === 'object' && 'then' in children) {
@@ -54,7 +53,7 @@ export const renderToReadableStream = async (node: JSXNode | string | HtmlEscape
   })
 }
 
-async function renderToString(node: JSXChild): Promise<string> {
+async function renderToString(node: Child | JSXChild): Promise<string> {
   if (!node) return ''
   if (typeof node === 'string') return node
   if (typeof node === 'number') return String(node)
@@ -84,6 +83,7 @@ async function renderToString(node: JSXChild): Promise<string> {
         if (value === false || value === null || value === undefined) return ''
         if (typeof value === 'object') {
           if (value === null) return ''
+          if (key === 'children') return ''
           return `${key}="${JSON.stringify(value)}"`
         }
         return `${key}="${value}"`
@@ -91,15 +91,21 @@ async function renderToString(node: JSXChild): Promise<string> {
       .filter(Boolean)
       .join(' ')
 
-    const renderChildren = async (children: JSXChildArray): Promise<string[]> => {
-      return Promise.all(children.map((child: JSXChild) => renderToString(child)))
+    let children: string | string[] = ''
+    if (jsxNode.props?.children) {
+      const childrenProp = jsxNode.props.children
+      if (Array.isArray(childrenProp)) {
+        children = await Promise.all(childrenProp.map(child => renderToString(child)))
+      } else {
+        children = await renderToString(childrenProp)
+      }
+    } else if (jsxNode.children) {
+      if (Array.isArray(jsxNode.children)) {
+        children = await Promise.all(jsxNode.children.map(child => renderToString(child)))
+      } else {
+        children = await renderToString(jsxNode.children)
+      }
     }
-
-    const children = Array.isArray(jsxNode.children)
-      ? await renderChildren(jsxNode.children as JSXChildArray)
-      : jsxNode.children
-      ? await renderToString(jsxNode.children as JSXChild)
-      : ''
 
     const renderedChildren = Array.isArray(children) ? children.join('') : children
     const propsString = props ? ` ${props}` : ''
