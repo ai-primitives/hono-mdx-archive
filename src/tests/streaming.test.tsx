@@ -1,59 +1,32 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { jsx } from 'hono/jsx'
-import { createMDXRenderer } from '../components/MDXComponent'
-import { Context } from 'hono'
+import { renderMDXToStream } from '../renderer/streaming'
 
 describe('MDX Streaming', () => {
   it('should create streaming renderer', async () => {
-    const source = `# Hello World
+    const mdxContent = '# Streaming Test\n\nThis is a test of streaming content.'
+    const stream = await renderMDXToStream(mdxContent)
 
-This is a test paragraph with **bold** text.
-
-- List item 1
-- List item 2`
-
-    const renderer = createMDXRenderer(source)
-    const mockContext = {
-      body: vi.fn().mockReturnValue({ status: 200 })
-    } as unknown as Context
-
-    await renderer(mockContext)
-
-    expect(mockContext.body).toHaveBeenCalledWith(
-      expect.any(ReadableStream),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'Content-Type': 'text/html; charset=UTF-8',
-          'Transfer-Encoding': 'chunked'
-        })
-      })
-    )
+    expect(stream).toBeDefined()
+    expect(stream instanceof ReadableStream).toBe(true)
   })
 
   it('should handle async content in streams', async () => {
-    const asyncContent = await new Promise(resolve =>
-      setTimeout(() => resolve('Async content loaded!'), 100)
+    const asyncContent = new Promise<string>(resolve =>
+      setTimeout(() => resolve('# Async Content\n\nLoaded after delay'), 100)
     )
 
-    const source = `# Test Page
+    const stream = await renderMDXToStream(asyncContent)
+    expect(stream).toBeDefined()
+    expect(stream instanceof ReadableStream).toBe(true)
+  })
 
-## Dynamic Content
+  it('should render with custom components', async () => {
+    const CustomComponent = () => jsx('div', { className: 'custom' }, ['Custom Content'])
+    const mdxContent = `# Test\n\n<CustomComponent />`
 
-${asyncContent}
-
-- This content was loaded asynchronously
-- Using Suspense and streaming`
-
-    const renderer = createMDXRenderer(source)
-    const mockContext = {
-      body: vi.fn().mockReturnValue({ status: 200 })
-    } as unknown as Context
-
-    await renderer(mockContext)
-
-    expect(mockContext.body).toHaveBeenCalledWith(
-      expect.any(ReadableStream),
-      expect.any(Object)
-    )
+    const stream = await renderMDXToStream(mdxContent, { CustomComponent })
+    expect(stream).toBeDefined()
+    expect(stream instanceof ReadableStream).toBe(true)
   })
 })

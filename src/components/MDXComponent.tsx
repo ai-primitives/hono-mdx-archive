@@ -1,21 +1,14 @@
 import { jsx } from 'hono/jsx'
-import type { JSXNode } from 'hono/jsx'
+import type { FC, ComponentType } from 'react'
 import { compile, type CompileOptions } from '@mdx-js/mdx'
-import type { ComponentType } from 'react'
-import type { MiddlewareHandler } from 'hono/types'
-import { jsxRenderer } from 'hono/jsx-renderer'
-import { renderToReadableStream, Suspense } from 'hono/jsx/streaming'
-import { hydrate } from 'hono/jsx/dom'
-import { ErrorBoundary } from './ErrorBoundary'
-import { MDXCompilationError, MDXRenderError } from '../utils/errors'
-import type { JsxRendererOptions } from 'hono/jsx-renderer'
-import { html } from 'hono/html'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
+import { MDXCompilationError, MDXRenderError } from '../utils/errors'
 
 export interface MDXComponentProps {
   source: string | Promise<string>
   components?: Record<string, ComponentType>
+  hydrate?: boolean
 }
 
 async function compileMDX(source: string | Promise<string>, components: Record<string, ComponentType> = {}): Promise<ComponentType<any>> {
@@ -41,17 +34,17 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
       const _components = arguments[1] || {};
       const _jsx = _runtime.jsx;
       const _Fragment = _runtime.Fragment;
-      const _jsxs = _runtime.jsxs || ((type, props, ...children) => _jsx(type, { ...props, children }));
+      const _jsxs = _runtime.jsxs || _jsx;
 
       const MDXContent = (props) => {
-        const { components: _components } = props;
+        const { components } = props;
         return (() => {
           ${compiledCode}
-          return typeof MDXContent === 'function' ? MDXContent({ ...props, components: _components }) : null;
+          return typeof MDXContent === 'function' ? MDXContent({ ...props, components: { ..._components, ...components } }) : null;
         })();
       };
 
-      return function MDXComponent(props) {
+      return function(props) {
         return MDXContent({
           ...props,
           components: { ..._components, ...props.components }
@@ -63,8 +56,9 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
     const Component = createComponent({
       jsx,
       Fragment: Symbol('Fragment'),
-      jsxs: (type: any, props: any) => jsx(type, { ...props })
+      jsxs: jsx
     }, components)
+
     return Component
   } catch (error) {
     console.error('MDX Compilation Error:', error)
@@ -72,113 +66,34 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
   }
 }
 
-export async function createMDXComponent(source: string | Promise<string>, components: Record<string, ComponentType> = {}) {
+export async function createMDXComponent(source: string | Promise<string>, components: Record<string, ComponentType> = {}): Promise<ComponentType<any>> {
   try {
-    const Component = await compileMDX(source, components)
-    return Component
+    return await compileMDX(source, components)
   } catch (error) {
-    console.error('MDX Component Creation Error:', error)
-    return () => jsx('div', {
-      'data-error': true,
-      className: 'error',
-      'aria-label': 'MDX compilation error'
-    }, [String(error)])
+    console.error('Error creating MDX component:', error)
+    throw error
   }
 }
 
-export const MDXComponent = ({ source, components = {} }: MDXComponentProps): JSXNode => {
-  const isTestEnv = process.env.NODE_ENV === 'test'
-  const shouldHydrate = !isTestEnv && typeof window !== 'undefined'
-
+export const MDXComponent: FC<MDXComponentProps> = async ({ source, components = {}, hydrate = false }) => {
   try {
-    const promise = createMDXComponent(source, components)
+    const Component = await createMDXComponent(source, components)
     const element = jsx('div', {
-      'data-mdx': true,
       id: 'mdx-root',
-      className: 'prose container',
-      'data-hydrate': shouldHydrate,
-      'data-source': typeof source === 'string' ? source : undefined
-    }, [
-      jsx(ErrorBoundary, {}, [
-        jsx(Suspense, {
-          fallback: jsx('div', { className: 'loading' }, ['Loading MDX content...']),
-          children: promise.then(Component => {
-            try {
-              return jsx(Component, { components })
-            } catch (error) {
-              console.error('Error rendering MDX component:', error)
-              return jsx('div', {
-                'data-error': true,
-                className: 'error',
-                'aria-label': 'MDX rendering error'
-              }, [String(error)])
-            }
-          })
-        })
-      ])
-    ])
+      'data-mdx': true,
+      'data-hydrate': hydrate,
+      'data-source': typeof source === 'string' ? source : undefined,
+      className: 'prose dark:prose-invert max-w-none'
+    }, [jsx(Component, { components })])
+
     return element
   } catch (error) {
-    console.error('Error in MDXComponent:', error)
+    console.error('Error rendering MDX:', error)
     return jsx('div', {
+      id: 'mdx-root',
+      'data-mdx': true,
       'data-error': true,
-      className: 'error',
-      'aria-label': 'MDX processing error'
-    }, ['Failed to process MDX content'])
-  }
-}
-
-// Client-side hydration
-if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
-  const root = document.getElementById('mdx-root')
-  if (root && root.getAttribute('data-hydrate') === 'true') {
-    try {
-      const source = root.innerHTML
-      hydrate(jsx(MDXComponent, { source }), root)
-    } catch (error) {
-      console.error('Hydration error:', error)
-    }
-  }
-}
-
-export function mdx(): MiddlewareHandler {
-  const renderer: JsxRendererOptions = {
-    docType: true,
-    stream: true
-  }
-  return jsxRenderer(renderer)
-}
-
-export function createMDXRenderer(source: string, options: CompileOptions = {}): MiddlewareHandler {
-  return async (c) => {
-    try {
-      const component = await compileMDX(source, {
-        ...options,
-        jsxImportSource: 'hono/jsx'
-      })
-
-      const jsxContent = jsx('div', {}, [
-        jsx(ErrorBoundary, {}, [
-          jsx(Suspense, {
-            fallback: jsx('div', {}, ['Loading MDX content...'])
-          }, [
-            jsx(component as unknown as ComponentType, {})
-          ])
-        ])
-      ])
-
-      const htmlContent = html`${jsxContent}`
-      const stream = await renderToReadableStream(htmlContent)
-
-      return c.body(stream, {
-        headers: {
-          'Content-Type': 'text/html; charset=UTF-8',
-          'Transfer-Encoding': 'chunked'
-        }
-      })
-    } catch (error) {
-      console.error('Error rendering MDX:', error)
-      throw new MDXRenderError(`Failed to render MDX: ${error}`)
-    }
+      className: 'prose dark:prose-invert max-w-none'
+    }, [`Error rendering MDX: ${error.message}`])
   }
 }
