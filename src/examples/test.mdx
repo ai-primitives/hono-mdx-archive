@@ -1,0 +1,35 @@
+---
+title: Test MDX Page
+description: Testing MDX rendering with Hono
+---
+
+# Hello from MDX!
+
+This is a test page to verify MDX rendering functionality.
+
+## Features
+
+- Server-side rendering
+- Suspense support
+- Streaming capabilities
+- Component integration
+
+## Code Example
+
+```jsx
+import { MDXComponent } from 'hono-mdx'
+
+app.get('/', (c) => {
+  return c.jsx(<MDXComponent source={mdxContent} />)
+})
+```
+
+## Dynamic Content
+
+The following content is loaded asynchronously:
+
+{new Promise(resolve => {
+  setTimeout(() => {
+    resolve('This content was loaded after 1 second!')
+  }, 1000)
+})}

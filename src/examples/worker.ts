@@ -1,115 +1,130 @@
 import { jsx } from 'hono/jsx'
 import { Hono } from 'hono'
-import type { Context, Next } from 'hono'
+import { logger } from 'hono/logger'
+import { prettyJSON } from 'hono/pretty-json'
+import { jsxRenderer } from 'hono/jsx-renderer'
+import type { Context } from 'hono'
 import { MDXComponent, Suspense, mdx } from '../'
-import { MDXCompilationError, MDXRenderError } from '../utils/errors'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 interface Env {
-  // Cloudflare Worker bindings
+  // Cloudflare Worker bindings will go here
 }
 
-interface Variables {
-  // Middleware variables
-}
+const app = new Hono<Env>()
 
-type AppType = {
-  Bindings: Env
-  Variables: Variables
-}
-
-const app = new Hono<AppType>()
-
-// Add middleware
-app.use('*', async (c: Context<AppType>, next: Next) => {
-  console.log(`[${new Date().toISOString()}] Request: ${c.req.method} ${c.req.url}`)
-  await next()
-})
-
+// Set up middleware
+app.use('*', logger())
+app.use('*', prettyJSON())
+app.use('*', jsxRenderer({
+  docType: true,
+  stream: true
+}))
 app.use('*', mdx())
 
-const mdxContent = `
-# Hello from Cloudflare Worker
+// Basic MDX content for testing
+const basicMdxContent = `
+# Hello from MDX!
 
-This is a test MDX document rendered using Hono's JSX renderer.
+This is a test page to verify MDX rendering functionality.
 
 ## Features
-- Server-side rendering with Hono
-- Suspense support for async content
-- Streaming capabilities
-- Cloudflare Workers integration
 
-\`\`\`jsx
-// Example usage
-<MDXComponent source={content} />
-\`\`\`
+- Server-side rendering
+- Suspense support
+- Streaming capabilities
+- Component integration
 `
 
+// Function to simulate async MDX content fetching
 async function fetchAsyncContent() {
-  return new Promise<string>((resolve) => {
-    setTimeout(() => {
-      resolve(`
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  return `
 # Async MDX Content
 
-This content was loaded asynchronously with a delay to demonstrate Suspense.
+This content was loaded asynchronously after a 1-second delay.
 
-## Features
-- Async loading
-- Suspense fallback
-- Streaming support
-      `)
-    }, 1000)
-  })
+## Dynamic Content
+
+The following content demonstrates async data loading:
+
+{new Promise(resolve => {
+  setTimeout(() => {
+    resolve('This content was loaded after another second!')
+  }, 1000)
+})}
+  `
 }
 
-// Basic usage with error handling
-app.get('/', async (c) => {
-  try {
-    console.log('Rendering basic MDX content')
-    return c.jsx(
-      jsx('div', { className: 'mdx-content' }, [
-        jsx(MDXComponent, { source: mdxContent })
-      ])
-    )
-  } catch (error) {
-    console.error('Error rendering MDX:', error)
-    const errorResponse = new Response(
-      error instanceof MDXCompilationError || error instanceof MDXRenderError
-        ? error.message
-        : 'Internal Server Error',
-      {
-        status: error instanceof MDXCompilationError || error instanceof MDXRenderError ? 400 : 500,
-        headers: { 'Content-Type': 'text/plain' }
-      }
-    )
-    return errorResponse
-  }
+// Basic MDX rendering
+app.get('/', (c: Context<Env>) => {
+  return c.jsx(
+    jsx(ErrorBoundary, {}, [
+      jsx(MDXComponent, { source: basicMdxContent })
+    ])
+  )
 })
 
-// Async usage with Suspense and streaming
-app.get('/async', async (c) => {
-  try {
-    console.log('Rendering async MDX content')
-    return c.jsx(
-      jsx('div', { className: 'mdx-content' }, [
-        jsx(Suspense, {
-          fallback: jsx('div', {}, ['Loading async content...']),
-          children: jsx(MDXComponent, { source: fetchAsyncContent() })
-        })
+// Async MDX with Suspense
+app.get('/async', (c: Context<Env>) => {
+  return c.jsx(
+    jsx(ErrorBoundary, {}, [
+      jsx(Suspense, {
+        fallback: jsx('div', {}, ['Loading MDX content...'])
+      }, [
+        jsx(MDXComponent, { source: fetchAsyncContent() })
       ])
-    )
-  } catch (error) {
-    console.error('Error rendering async MDX:', error)
-    const errorResponse = new Response(
-      error instanceof MDXCompilationError || error instanceof MDXRenderError
-        ? error.message
-        : 'Internal Server Error',
-      {
-        status: error instanceof MDXCompilationError || error instanceof MDXRenderError ? 400 : 500,
-        headers: { 'Content-Type': 'text/plain' }
-      }
-    )
-    return errorResponse
-  }
+    ])
+  )
+})
+
+// Streaming multiple components
+app.get('/stream', async (c: Context<Env>) => {
+  const slowContent = new Promise(resolve => {
+    setTimeout(() => resolve('Slow content loaded after 2 seconds'), 2000)
+  })
+  const fastContent = new Promise(resolve => {
+    setTimeout(() => resolve('Fast content loaded after 1 second'), 1000)
+  })
+  const streamingMdx = `
+# Streaming MDX Demo
+
+This page demonstrates streaming multiple components:
+
+## Fast Component
+{${fastContent}}
+
+## Slow Component
+{${slowContent}}
+  `
+
+  return c.jsx(
+    jsx(ErrorBoundary, {}, [
+      jsx(Suspense, {
+        fallback: jsx('div', {}, ['Loading streaming content...'])
+      }, [
+        jsx(MDXComponent, { source: streamingMdx })
+      ])
+    ])
+  )
+})
+
+// Error handling demo
+app.get('/error', (c: Context<Env>) => {
+  const invalidMdx = `
+# Error Test
+
+{(() => {
+  throw new Error('Test error in MDX')
+})()}
+  `
+
+  return c.jsx(
+    jsx(ErrorBoundary, {}, [
+      jsx(MDXComponent, { source: invalidMdx })
+    ])
+  )
 })
 
 export default app

@@ -1,7 +1,12 @@
+declare global {
+  var jsx: any
+  var Fragment: any
+}
+
 declare module 'hono/jsx' {
   import type { ComponentType } from 'react'
 
-  type Child = JSXNode | string | Promise<JSXNode> | (() => Promise<JSXNode>)
+  type Child = JSX.Element | string | Promise<JSX.Element> | (() => Promise<JSX.Element>)
   type Children = Child | Child[]
 
   interface JSXNode {
@@ -10,7 +15,6 @@ declare module 'hono/jsx' {
     children?: Children
   }
 
-  // Custom type that works with both Hono and React components
   interface HonoComponent<P = {}> extends ComponentType<P> {
     (props: P): JSXNode
   }
@@ -20,6 +24,8 @@ declare module 'hono/jsx' {
     props: Record<string, any>,
     children?: Children
   ): JSXNode
+
+  export const Fragment: any
 
   export namespace JSX {
     interface Element extends JSXNode {}
@@ -65,12 +71,26 @@ declare module 'hono' {
       (node: JSXNode): Response
       (type: string | Function | ComponentType, props: Record<string, any>, children?: Children): Response
     }
+    text: (text: string, status?: number, headers?: Record<string, string>) => Response
+    json: <T = any>(obj: T, status?: number, headers?: Record<string, string>) => Response
   }
 
   export class Hono<E = {}> {
-    use(path: string, middleware: (c: Context<E>, next: Next) => Promise<void>): this
-    get(path: string, handler: (c: Context<E>) => Response | Promise<Response>): this
+    use(path: string, handler: MiddlewareHandler<E>, ...handlers: MiddlewareHandler<E>[]): Hono<E>
+    get(path: string, handler: MiddlewareHandler<E>, ...handlers: MiddlewareHandler<E>[]): Hono<E>
+    post(path: string, handler: MiddlewareHandler<E>, ...handlers: MiddlewareHandler<E>[]): Hono<E>
   }
 
   export type Next = () => Promise<void>
+}
+
+declare module 'hono/jsx-renderer' {
+  import type { MiddlewareHandler } from 'hono'
+
+  interface JsxRendererOptions {
+    docType?: boolean
+    stream?: boolean
+  }
+
+  export function jsxRenderer(options?: JsxRendererOptions): MiddlewareHandler
 }

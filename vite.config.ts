@@ -17,17 +17,22 @@ export default defineConfig({
     lib: {
       entry: {
         index: 'src/index.ts',
-        worker: 'src/examples/worker.ts'
+        worker: 'src/worker.ts'
       },
       formats: ['es'],
       fileName: (format, entryName) => `${entryName}.js`
     },
     rollupOptions: {
-      external: ['react', 'react-dom'],
+      external: ['react', 'react-dom', 'hono'],
       output: {
         format: 'es',
         entryFileNames: '[name].js',
-        chunkFileNames: '[name]-[hash].js'
+        chunkFileNames: '[name]-[hash].js',
+        globals: {
+          'react': 'React',
+          'react-dom': 'ReactDOM',
+          'hono': 'Hono'
+        }
       }
     }
   },

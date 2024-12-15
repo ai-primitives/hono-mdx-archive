@@ -1,5 +1,5 @@
-name = "hono-mdx-example"
-main = "src/examples/worker.ts"
+name = "hono-mdx"
+main = "src/worker.ts"
 compatibility_date = "2024-01-01"
 
 [build]
@@ -7,5 +7,15 @@ command = "npm run build"
 
 [build.upload]
 format = "modules"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hono_mdx_auth"
+database_id = "hono-mdx-auth"
+
+[vars]
+GITHUB_CLIENT_ID = ""
+GITHUB_CLIENT_SECRET = ""
+APP_URL = "http://localhost:8787"
 
 node_compat = true
