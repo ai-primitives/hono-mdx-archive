@@ -18,9 +18,11 @@ describe('Styling Integration', () => {
   })
 
   it('should include PicoCSS and Tailwind in Layout', async () => {
-    const res = await testApp.request('/', setTestContext(Layout, {
-      children: 'Test Content'
-    }))
+    const res = await testApp.request('/', {
+      ...setTestContext(Layout, {
+        children: jsx('div', {}, 'Test Content')
+      })
+    })
 
     const html = await res.text()
     expect(html).toContain('pico.min.css')
@@ -30,9 +32,11 @@ describe('Styling Integration', () => {
 
   it('should preserve Tailwind classes in MDX content', async () => {
     const mdxContent = '# Hello World'
-    const res = await testApp.request('/', setTestContext(Layout, {
-      children: jsx(MDXComponent, { source: mdxContent })
-    }))
+    const res = await testApp.request('/', {
+      ...setTestContext(Layout, {
+        children: jsx(MDXComponent, { source: mdxContent })
+      })
+    })
 
     const html = await res.text()
     expect(html).toContain('prose dark:prose-invert')
@@ -41,11 +45,13 @@ describe('Styling Integration', () => {
 
   it('should support streaming render with Suspense', async () => {
     const mdxContent = '# Hello World'
-    const stream = await testApp.request('/', setTestContext(Layout, {
-      children: jsx(Suspense, { fallback: 'Loading...' },
-        jsx(MDXComponent, { source: mdxContent })
-      )
-    })).then(res => res.body)
+    const stream = await testApp.request('/', {
+      ...setTestContext(Layout, {
+        children: jsx(Suspense, { fallback: 'Loading...' },
+          jsx(MDXComponent, { source: mdxContent })
+        )
+      })
+    }).then(res => res.body)
 
     const chunks: string[] = []
     const reader = stream.getReader()

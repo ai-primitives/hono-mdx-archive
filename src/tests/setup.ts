@@ -1,5 +1,6 @@
+/** @jsxImportSource hono/jsx */
 import { vi } from 'vitest'
-import { jsx } from 'hono/jsx'
+import { jsx, Fragment } from 'hono/jsx'
 import { Hono } from 'hono'
 import { jsxRenderer } from 'hono/jsx-renderer'
 
@@ -32,17 +33,37 @@ Object.defineProperty(global, 'crypto', {
   writable: true
 })
 
+// Set up global JSX runtime
+global.React = {
+  createElement: jsx,
+  Fragment
+}
+
 // Set up Hono app with JSX renderer
 const app = new Hono()
 
+// Configure JSX renderer with proper component handling
 app.use('*', jsxRenderer({
-  docType: true
+  docType: true,
+  jsx: (type, props, ...children) => {
+    if (typeof type === 'function') {
+      return type({ ...props, children: children.flat() })
+    }
+    return jsx(type, props, ...children)
+  }
 }))
 
 // Create test handler for JSX rendering
 app.get('*', (c) => {
   const { component, props } = c.get('test-context') || {}
-  return component ? c.render(jsx(component, props || {})) : c.render(null)
+  if (!component) return c.render(null)
+
+  try {
+    return c.render(jsx(component, props || {}))
+  } catch (error) {
+    console.error('Error rendering component:', error)
+    return c.render(null)
+  }
 })
 
 // Export for tests to use
