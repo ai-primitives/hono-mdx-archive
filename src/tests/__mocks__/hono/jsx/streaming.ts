@@ -1,41 +1,60 @@
 import type { HtmlEscapedString } from 'hono/utils/html'
 import type { JSXNode, Child } from 'hono/jsx'
+import { jsx } from 'hono/jsx'
 
 type JSXChild = JSXNode | string | HtmlEscapedString | Promise<any>
 type JSXChildren = JSXChild | JSXChild[]
 
 export const Suspense = ({ fallback, children }: { fallback: JSXChild; children: JSXChildren }) => {
+  // Handle Promise-based children
   if (children && typeof children === 'object' && 'then' in children) {
-    return Promise.resolve(children).then((resolved: JSXChild) => {
-      if (typeof resolved === 'object' && 'type' in resolved) {
-        return resolved
-      }
-      return resolved
-    })
+    return Promise.resolve(children)
+      .then(async (resolved: JSXChild) => {
+        if (resolved && typeof resolved === 'object' && 'type' in resolved) {
+          return resolved
+        }
+        const content = await renderToString(resolved)
+        return jsx('div', { 'data-mdx': true }, content)
+      })
+      .catch(() => fallback)
   }
 
+  // Handle array of children
   if (Array.isArray(children)) {
     const firstChild = children[0]
-    if (firstChild && typeof firstChild === 'object' && 'type' in firstChild) {
-      if (typeof firstChild.type === 'function') {
-        const result = firstChild.type(firstChild.props || {})
+    if (firstChild && typeof firstChild === 'object' && 'then' in firstChild) {
+      return firstChild
+        .then(async (resolved: JSXChild) => {
+          const content = await renderToString(resolved)
+          return jsx('div', { 'data-mdx': true }, content)
+        })
+        .catch(() => fallback)
+    }
+    return Promise.all(children.map(child => renderToString(child)))
+      .then(contents => jsx('div', { 'data-mdx': true }, contents.join('')))
+  }
+
+  // Handle single child
+  if (children && typeof children === 'object' && 'type' in children) {
+    if (typeof children.type === 'function') {
+      try {
+        const result = children.type(children.props || {})
         if (result && typeof result === 'object' && 'then' in result) {
-          return result.then((resolved: JSXChild) => resolved)
+          return result
+            .then(async (resolved: JSXChild) => {
+              const content = await renderToString(resolved)
+              return jsx('div', { 'data-mdx': true }, content)
+            })
+            .catch(() => fallback)
         }
-        return result
+        return renderToString(result).then(content =>
+          jsx('div', { 'data-mdx': true }, content)
+        )
+      } catch {
+        return fallback
       }
     }
     return children
-  }
-
-  if (children && typeof children === 'object' && 'type' in children) {
-    if (typeof children.type === 'function') {
-      const result = children.type(children.props || {})
-      if (result && typeof result === 'object' && 'then' in result) {
-        return result.then((resolved: JSXChild) => resolved)
-      }
-      return result
-    }
   }
 
   return children || fallback
@@ -77,14 +96,15 @@ async function renderToString(node: Child | JSXChild): Promise<string> {
 
     const props = Object.entries(jsxNode.props || {})
       .map(([key, value]) => {
-        if (key === 'className') key = 'class'
         if (key === 'children') return ''
+        if (key === 'className') return `class="${value}"`
+        if (key === 'id') return `id="${value}"`
+        if (key.startsWith('data-')) return `${key}="${value}"`
         if (value === true) return key
         if (value === false || value === null || value === undefined) return ''
         if (typeof value === 'object') {
           if (value === null) return ''
-          if (key === 'children') return ''
-          return `${key}="${JSON.stringify(value)}"`
+          return ''
         }
         return `${key}="${value}"`
       })
