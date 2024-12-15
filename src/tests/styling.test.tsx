@@ -1,17 +1,29 @@
 /** @jsxImportSource hono/jsx */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { jsx } from 'hono/jsx'
-import { Suspense } from 'hono/jsx'
+import { Suspense } from 'hono/jsx/streaming'
 import Layout from '../components/Layout'
 import { MDXComponent } from '../components/MDXComponent'
 import { testApp, setTestContext } from './setup'
-import type { FC } from 'hono/jsx'
+
+// Mock remark-gfm
+vi.mock('remark-gfm', () => ({
+  default: vi.fn()
+}))
 
 // Mock MDX compilation
-vi.mock('../utils/mdx', () => ({
-  compileMDX: vi.fn().mockImplementation(async (source) => {
-    return () => jsx('div', { className: 'mdx-content' }, source)
-  })
+vi.mock('@mdx-js/mdx', () => ({
+  compile: vi.fn().mockImplementation(async () => ({
+    toString: () => `
+      import { jsx } from 'hono/jsx'
+      export default function MDXContent() {
+        return jsx('div', {
+          className: 'prose dark:prose-invert mdx-content',
+          'data-mdx': true
+        }, 'Test MDX Content')
+      }
+    `
+  }))
 }))
 
 describe('Styling Integration', () => {
@@ -20,10 +32,9 @@ describe('Styling Integration', () => {
   })
 
   it('should include PicoCSS and Tailwind in Layout', async () => {
-    const TestContent: FC = () => jsx('div', {}, 'Test Content')
     const res = await testApp.request('/', {
       ...setTestContext(Layout, {
-        children: jsx(TestContent, {})
+        children: jsx('div', { className: 'test-content' }, 'Test Content')
       })
     })
 
@@ -50,13 +61,15 @@ describe('Styling Integration', () => {
     const mdxContent = '# Hello World'
     const res = await testApp.request('/', {
       ...setTestContext(Layout, {
-        children: jsx(Suspense, { fallback: 'Loading...' },
+        children: jsx(Suspense, { fallback: jsx('div', {}, 'Loading...') },
           jsx(MDXComponent, { source: mdxContent })
         )
       })
     })
 
     const stream = res.body
+    if (!stream) throw new Error('No response body')
+
     const chunks: string[] = []
     const reader = stream.getReader()
     while (true) {

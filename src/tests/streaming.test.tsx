@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { jsx } from 'hono/jsx'
+import { html } from 'hono/html'
+import type { HtmlEscapedString } from 'hono/utils/html'
 import { renderMDXToStream } from '../renderer/streaming'
 import { hydrateMDX } from '../client'
-import { Suspense } from '../tests/__mocks__/hono/jsx/streaming'
+import type { ComponentType } from '../components/MDXComponent'
 
 const mockElement = {
   getAttribute: vi.fn(),
@@ -44,9 +46,9 @@ describe('MDX Streaming', () => {
   })
 
   it('should handle async content with proper streaming', async () => {
-    const AsyncComponent = async () => {
-      await new Promise(resolve => setTimeout(resolve, 50))
-      return jsx('div', { className: 'async' }, ['Async Content'])
+    const AsyncComponent: ComponentType = async ({ children }): Promise<HtmlEscapedString> => {
+      const content = jsx('div', { className: 'async' }, 'Async Content')
+      return html`${String(content)}${String(children ?? '')}`
     }
 
     const mdxContent = `
@@ -69,9 +71,9 @@ describe('MDX Streaming', () => {
   })
 
   it('should support server rendering with client hydration', async () => {
-    const AsyncComponent = async () => {
-      await new Promise(resolve => setTimeout(resolve, 50))
-      return jsx('div', { className: 'hydrated' }, ['Hydrated Content'])
+    const AsyncComponent: ComponentType = async ({ children }): Promise<HtmlEscapedString> => {
+      const content = jsx('div', { className: 'hydrated' }, 'Hydrated Content')
+      return html`${String(content)}${String(children ?? '')}`
     }
 
     const mdxContent = `

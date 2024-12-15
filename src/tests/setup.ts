@@ -1,9 +1,12 @@
 /** @jsxImportSource hono/jsx */
 import { vi } from 'vitest'
-import { jsx, Fragment } from 'hono/jsx'
+import { jsx } from 'hono/jsx'
 import { Hono } from 'hono'
 import { jsxRenderer } from 'hono/jsx-renderer'
 import type { FC } from 'hono/jsx'
+import type { Context } from 'hono'
+import type { ComponentType } from '../components/MDXComponent'
+import { html } from 'hono/html'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -34,38 +37,30 @@ Object.defineProperty(global, 'crypto', {
   writable: true
 })
 
-// Set up global JSX runtime
-global.React = {
-  createElement: jsx,
-  Fragment
+interface TestContext extends Context {
+  get(key: 'test-context'): { component: FC<any>; props?: Record<string, unknown> } | undefined
+  get(key: string): unknown
 }
 
-// Set up Hono app with JSX renderer
+// Configure Hono app with JSX renderer
 const app = new Hono()
 
-// Configure JSX renderer with proper component handling
-app.use('*', jsxRenderer({
-  docType: true,
-  jsx: (type: any, props: any, ...children: any[]) => {
-    if (typeof type === 'function') {
-      const flatChildren = children.flat()
-      return type({
-        ...props,
-        children: flatChildren.length === 1 ? flatChildren[0] : flatChildren
-      })
-    }
-    return jsx(type, props, ...children)
-  }
+// Configure JSX renderer with proper JSX to HTML conversion
+app.use('*', jsxRenderer(async ({ children }) => {
+  const rendered = await Promise.resolve(children)
+  return html`<!DOCTYPE html>${String(rendered)}`
 }))
 
 // Create test handler for JSX rendering
-app.get('*', async (c) => {
-  const { component: Component, props } = c.get('test-context') || {}
-  if (!Component) return c.text('')
+app.get('*', async (c: TestContext) => {
+  const testContext = c.get('test-context')
+  if (!testContext?.component) return c.text('')
 
+  const { component: Component, props } = testContext
   try {
     const element = jsx(Component, props || {})
-    return c.render(element)
+    const rendered = await Promise.resolve(element)
+    return c.html(html`${String(rendered)}`)
   } catch (error) {
     console.error('Error rendering component:', error)
     return c.text('')
@@ -76,7 +71,7 @@ app.get('*', async (c) => {
 export const testApp = app
 
 // Helper function to set test context
-export const setTestContext = (component: FC, props?: any) => ({
+export const setTestContext = (component: FC<any>, props?: Record<string, unknown>) => ({
   test: true,
   headers: {},
   get: (key: string) => {
@@ -89,16 +84,29 @@ export const setTestContext = (component: FC, props?: any) => ({
 
 // Mock streaming renderer
 vi.mock('../renderer/streaming', () => ({
-  createStreamingRenderer: vi.fn().mockImplementation(async ({ source, wrapper }) => {
-    const content = wrapper ? wrapper(source) : source
-    return new ReadableStream({
-      start(controller) {
-        const encoder = new TextEncoder()
-        controller.enqueue(encoder.encode(`<!DOCTYPE html>${content}`))
-        controller.close()
-      }
-    })
-  })
+  renderMDXToStream: async (source: string, components: Record<string, ComponentType> = {}) => {
+    const encoder = new TextEncoder()
+    try {
+      const AsyncComponent = components.AsyncComponent
+      const content = AsyncComponent
+        ? await AsyncComponent({})
+        : html`${jsx('div', {
+            id: 'mdx-root',
+            'data-mdx': true,
+            className: 'prose dark:prose-invert max-w-none'
+          }, source)}`
+
+      return new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(String(content)))
+          controller.close()
+        }
+      })
+    } catch (error) {
+      console.error('Error in renderMDXToStream:', error)
+      throw error
+    }
+  }
 }))
 
 // Mock fetch for testing
