@@ -1,23 +1,23 @@
 import { jsx } from 'hono/jsx'
 import { renderToReadableStream } from 'hono/jsx/streaming'
 import { Suspense } from 'hono/jsx/streaming'
-import type { ComponentType } from 'react'
+import type { FC } from 'hono/jsx'
 import { MDXComponent } from '../components/MDXComponent'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
 export interface StreamingRendererOptions {
   source: string | Promise<string>
-  components?: Record<string, ComponentType>
+  components?: Record<string, FC>
   fallback?: JSX.Element
 }
 
 export async function createStreamingRenderer({ source, components = {}, fallback }: StreamingRendererOptions): Promise<ReadableStream> {
-  const defaultFallback = jsx('div', { className: 'loading' }, ['Loading MDX content...'])
+  const defaultFallback = jsx('div', { className: 'loading' }, 'Loading MDX content...')
 
   try {
     const content = jsx(
       ErrorBoundary,
-      { onError: (error: Error) => jsx('div', { className: 'error' }, [`Error: ${error.message}`]) },
+      { onError: (error: Error) => jsx('div', { className: 'error' }, `Error: ${error.message}`) },
       [
         jsx(
           Suspense,
@@ -36,14 +36,14 @@ export async function createStreamingRenderer({ source, components = {}, fallbac
     console.error('Streaming Error:', error)
     return new ReadableStream({
       start(controller) {
-        const errorContent = `Error streaming MDX: ${error.message}`
-        controller.enqueue(new TextEncoder().encode(errorContent))
+        const errorContent = error instanceof Error ? error.message : String(error)
+        controller.enqueue(new TextEncoder().encode(`Error streaming MDX: ${errorContent}`))
         controller.close()
       }
     })
   }
 }
 
-export async function renderMDXToStream(source: string | Promise<string>, components: Record<string, ComponentType> = {}): Promise<ReadableStream> {
+export async function renderMDXToStream(source: string | Promise<string>, components: Record<string, FC> = {}): Promise<ReadableStream> {
   return createStreamingRenderer({ source, components })
 }

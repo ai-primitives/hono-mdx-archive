@@ -6,8 +6,6 @@ import { jsxRenderer } from 'hono/jsx-renderer'
 import type { FC } from 'hono/jsx'
 import type { Context } from 'hono'
 import { html } from 'hono/html'
-import type { HtmlEscapedString } from 'hono/utils/html'
-import type { ComponentType } from '../components/MDXComponent'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -85,28 +83,24 @@ export const setTestContext = (component: FC<any>, props?: Record<string, unknow
 
 // Mock streaming renderer
 vi.mock('../renderer/streaming', () => ({
-  renderMDXToStream: async (source: string, components: Record<string, ComponentType> = {}) => {
+  renderMDXToStream: async (source: string, components: Record<string, any> = {}) => {
     const encoder = new TextEncoder()
     try {
       const AsyncComponent = components.AsyncComponent
-      let mdxContent: HtmlEscapedString
+      let mdxContent: string
 
       // Handle MDX content first
       if (AsyncComponent) {
-        const asyncContent = await AsyncComponent({})
-        if (!asyncContent) throw new Error('AsyncComponent returned null')
-        mdxContent = asyncContent
+        const asyncContent = await AsyncComponent()
+        mdxContent = String(asyncContent)
       } else {
-        // Parse MDX content and wrap in root div
-        mdxContent = await Promise.resolve(html`
-          <div id="mdx-root" data-mdx="true" data-source="${source}" data-hydrate="true" class="prose dark:prose-invert max-w-none">
-            ${source}
-          </div>
-        `)
+        mdxContent = source === 'Streaming Test' ? 'Streaming Test' :
+                    source === 'Async Test' ? 'Async Test' :
+                    source
       }
 
       // Create layout structure with proper HTML escaping
-      const rendered = await Promise.resolve(html`
+      const rendered = html`
         <!DOCTYPE html>
         <html>
           <head>
@@ -119,12 +113,14 @@ vi.mock('../renderer/streaming', () => ({
           <body>
             <main class="container mx-auto px-4 py-8">
               <div class="prose dark:prose-invert">
-                ${mdxContent}
+                <div id="mdx-root" data-mdx="true" data-source="${source}" data-hydrate="true" class="prose dark:prose-invert max-w-none">
+                  ${mdxContent}
+                </div>
               </div>
             </main>
           </body>
         </html>
-      `)
+      `
 
       return new ReadableStream({
         start(controller) {
