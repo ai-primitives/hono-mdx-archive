@@ -3,6 +3,7 @@ import { vi } from 'vitest'
 import { jsx, Fragment } from 'hono/jsx'
 import { Hono } from 'hono'
 import { jsxRenderer } from 'hono/jsx-renderer'
+import type { FC } from 'hono/jsx'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -45,21 +46,25 @@ const app = new Hono()
 // Configure JSX renderer with proper component handling
 app.use('*', jsxRenderer({
   docType: true,
-  jsx: (type, props, ...children) => {
+  jsx: (type: any, props: any, ...children: any[]) => {
+    // Handle function components directly
     if (typeof type === 'function') {
-      return type({ ...props, children: children.flat() })
+      const flatChildren = children.flat()
+      return type({ ...props, children: flatChildren.length === 1 ? flatChildren[0] : flatChildren })
     }
+    // Handle JSX elements
     return jsx(type, props, ...children)
   }
 }))
 
 // Create test handler for JSX rendering
 app.get('*', (c) => {
-  const { component, props } = c.get('test-context') || {}
-  if (!component) return c.render(null)
+  const { component: Component, props } = c.get('test-context') || {}
+  if (!Component) return c.render(null)
 
   try {
-    return c.render(jsx(component, props || {}))
+    const element = jsx(Component, props || {})
+    return c.render(element)
   } catch (error) {
     console.error('Error rendering component:', error)
     return c.render(null)
@@ -70,7 +75,7 @@ app.get('*', (c) => {
 export const testApp = app
 
 // Helper function to set test context
-export const setTestContext = (component: any, props?: any) => ({
+export const setTestContext = (component: FC, props?: any) => ({
   test: true,
   headers: {},
   get: (key: string) => {

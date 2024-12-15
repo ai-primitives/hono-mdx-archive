@@ -14,7 +14,7 @@ export const Layout: FC = ({ children }) => {
       <body>
         <main className="container mx-auto px-4 py-8">
           <div className="prose dark:prose-invert">
-            {children}
+            {Array.isArray(children) ? children : [children]}
           </div>
         </main>
       </body>
