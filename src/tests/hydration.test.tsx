@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { jsx } from 'hono/jsx'
-import { MDXComponent } from '../components/MDXComponent'
 import { registerComponent, hydrateMDX, getComponents } from '../client'
 import { Suspense } from '../tests/__mocks__/hono/jsx/streaming'
 
@@ -36,7 +35,7 @@ describe('Client-side Hydration', () => {
   })
 
   it('should register and retrieve components', () => {
-    const TestComponent = () => jsx('div', {}, ['Test'])
+    const TestComponent = () => jsx('div', {}, 'Test')
     registerComponent('Test', TestComponent)
 
     const components = getComponents()
@@ -57,7 +56,7 @@ describe('Client-side Hydration', () => {
   it('should handle async component hydration', async () => {
     const AsyncComponent = async () => {
       await new Promise(resolve => setTimeout(resolve, 50))
-      return jsx('div', { className: 'async' }, ['Async Content'])
+      return jsx('div', { className: 'async' }, 'Async Content')
     }
     registerComponent('AsyncTest', AsyncComponent)
 
@@ -67,7 +66,7 @@ describe('Client-side Hydration', () => {
       return null
     })
 
-    const result = hydrateMDX()
+    const result = await hydrateMDX()
     expect(result).toBe(true)
 
     // Wait for async component to resolve
@@ -78,12 +77,12 @@ describe('Client-side Hydration', () => {
   it('should handle Suspense boundaries during hydration', async () => {
     const AsyncContent = async () => {
       await new Promise(resolve => setTimeout(resolve, 50))
-      return jsx('div', { className: 'suspense-content' }, ['Loaded Content'])
+      return jsx('div', { className: 'suspense-content' }, 'Loaded Content')
     }
 
     const element = jsx(
       Suspense,
-      { fallback: jsx('div', { className: 'loading' }, ['Loading...']) },
+      { fallback: jsx('div', { className: 'loading' }, 'Loading...') },
       AsyncContent()
     )
 
@@ -129,7 +128,7 @@ describe('Client-side Hydration', () => {
   it('should handle nested Suspense boundaries', async () => {
     const InnerAsync = async () => {
       await new Promise(resolve => setTimeout(resolve, 30))
-      return jsx('div', { className: 'inner' }, ['Inner Content'])
+      return jsx('div', { className: 'inner' }, 'Inner Content')
     }
 
     const OuterAsync = async () => {
@@ -139,7 +138,7 @@ describe('Client-side Hydration', () => {
         { className: 'outer' },
         [jsx(
           Suspense,
-          { fallback: jsx('div', { className: 'inner-loading' }, ['Loading Inner...']) },
+          { fallback: jsx('div', { className: 'inner-loading' }, 'Loading Inner...') },
           InnerAsync()
         )]
       )
@@ -147,7 +146,7 @@ describe('Client-side Hydration', () => {
 
     const element = jsx(
       Suspense,
-      { fallback: jsx('div', { className: 'outer-loading' }, ['Loading Outer...']) },
+      { fallback: jsx('div', { className: 'outer-loading' }, 'Loading Outer...') },
       OuterAsync()
     )
 

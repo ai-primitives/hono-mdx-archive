@@ -1,3 +1,6 @@
+[![npm version](https://badge.fury.io/js/hono-mdx.svg)](https://badge.fury.io/js/hono-mdx)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 # hono-mdx
 
 A powerful MDX runtime for Cloudflare Workers for Platforms, built on Hono's JSX renderer with support for Suspense, streaming, and client-side rendering.
@@ -5,8 +8,9 @@ A powerful MDX runtime for Cloudflare Workers for Platforms, built on Hono's JSX
 ## Features
 
 - Server-side MDX rendering using Hono's built-in JSX renderer
-- Support for Suspense and streaming with async MDX content
-- Client-side rendering capabilities
+- Full streaming support with proper JSX children handling
+- Suspense integration with async content and proper HTML escaping
+- Client-side hydration with HtmlEscapedString support
 - Default styling with PicoCSS and Tailwind CDN
 - Build/test/deploy using Wrangler
 - Integrated esbuild-wasm with HTTP URL imports
@@ -22,15 +26,15 @@ description: Build dynamic MDX applications with Hono's JSX renderer, featuring 
 ---
 
 <Hero
-  headline="Transform Your MDX Content into Dynamic Web Applications"
-  description="Build, deploy, and scale MDX applications with enterprise-grade performance using Hono's JSX renderer and Cloudflare Workers"
+  headline='Transform Your MDX Content into Dynamic Web Applications'
+  description='Build, deploy, and scale MDX applications with enterprise-grade performance using Hono&apos;s JSX renderer and Cloudflare Workers'
 />
 
 <Features
   items={[
     {
       title: 'Server-Side Rendering',
-      description: 'Lightning-fast MDX rendering with Hono\'s built-in JSX renderer'
+      description: 'Lightning-fast MDX rendering with Hono&apos;s built-in JSX renderer'
     },
     {
       title: 'Streaming & Suspense',
@@ -77,16 +81,50 @@ npx hono-mdx deploy
 import { jsx } from 'hono/jsx'
 import { MDXComponent } from 'hono-mdx'
 
-// Basic usage
+// Basic usage with streaming support
 app.get('/', (c) => {
   return c.jsx(<MDXComponent source={mdxContent} />)
 })
 
-// With Suspense for async content
+// Advanced streaming with Suspense boundaries
 app.get('/async', (c) => {
   return c.jsx(
     <Suspense fallback={<div>Loading...</div>}>
-      <MDXComponent source={asyncMdxContent} />
+      <Layout>
+        <MDXComponent
+          source={asyncMdxContent}
+          components={{
+            // Custom components with proper HTML escaping
+            CustomComponent: ({ children }) => <div className='custom'>{children}</div>
+          }}
+        />
+      </Layout>
+    </Suspense>
+  )
+})
+```
+
+### Streaming Features
+
+The streaming implementation provides:
+- Full JSX children handling with proper HTML escaping
+- Suspense boundary support for async content
+- Layout component integration
+- HtmlEscapedString support for safe content rendering
+- Proper handling of nested async components
+- Automatic content chunking for optimal performance
+
+Example with nested async components:
+
+```jsx
+app.get('/nested', (c) => {
+  return c.jsx(
+    <Suspense fallback={<div>Loading outer...</div>}>
+      <AsyncComponent>
+        <Suspense fallback={<div>Loading inner...</div>}>
+          <MDXComponent source={asyncContent} />
+        </Suspense>
+      </AsyncComponent>
     </Suspense>
   )
 })
@@ -178,6 +216,30 @@ The package includes PicoCSS by default and can be enhanced with Tailwind:
 <script src="https://cdn.tailwindcss.com"></script>
 ```
 
+## TypeScript Configuration
+
+Configure TypeScript for proper JSX support:
+
+```json
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  }
+}
+```
+
+For testing with Vitest, ensure your configuration includes:
+
+```typescript
+// vitest.config.ts
+export default defineConfig({
+  test: {
+    environment: 'node'
+  }
+})
+```
+
 ## Development
 
 ```bash
@@ -193,6 +255,14 @@ npm test
 # Build for production
 npm run build
 ```
+
+## Dependencies
+
+- hono: ^4.0.0
+- esbuild-wasm: ^0.24.0
+- @picocss/pico: ^2.0.6
+- @monaco-editor/react: ^4.6.0
+- @clickhouse/client-web: ^1.9.1
 
 ## License
 

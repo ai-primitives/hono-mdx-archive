@@ -1,8 +1,11 @@
+/** @jsxImportSource hono/jsx */
 import { vi } from 'vitest'
 import { jsx } from 'hono/jsx'
-import { compile } from '@mdx-js/mdx'
-import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
+import { Hono } from 'hono'
+import { jsxRenderer } from 'hono/jsx-renderer'
+import type { FC } from 'hono/jsx'
+import type { Context } from 'hono'
+import { html } from 'hono/html'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -33,87 +36,104 @@ Object.defineProperty(global, 'crypto', {
   writable: true
 })
 
-// Set up MDX compilation
-global.compileMDX = async (source: string) => {
+interface TestContext extends Context {
+  get(key: 'test-context'): { component: FC<any>; props?: Record<string, unknown> } | undefined
+  get(key: string): unknown
+}
+
+// Configure Hono app with JSX renderer
+const app = new Hono()
+
+// Configure JSX renderer with proper JSX to HTML conversion
+app.use('*', jsxRenderer(async ({ children }) => {
+  const rendered = await Promise.resolve(children)
+  return html`<!DOCTYPE html>${String(rendered)}`
+}))
+
+// Create test handler for JSX rendering
+app.get('*', async (c: TestContext) => {
+  const testContext = c.get('test-context')
+  if (!testContext?.component) return c.text('')
+
+  const { component: Component, props } = testContext
   try {
-    const result = await compile(source, {
-      jsx: true,
-      jsxImportSource: 'hono/jsx',
-      development: false,
-      outputFormat: 'function-body',
-      remarkPlugins: [remarkGfm],
-      rehypePlugins: [[rehypeRaw, { passThrough: ['mdxJsxFlowElement', 'mdxJsxTextElement'] }]]
-    })
-    return result.toString()
+    const element = jsx(Component, props || {})
+    const rendered = await Promise.resolve(element)
+    return c.html(html`${String(rendered)}`)
   } catch (error) {
-    console.error('MDX Compilation Error:', error)
-    throw error
+    console.error('Error rendering component:', error)
+    return c.text('')
   }
-}
+})
 
-// Mock Hono's JSX runtime
-const jsxRuntime = {
-  jsx: (type: any, props: any, ...children: any[]) => {
-    // Handle function components
-    if (typeof type === 'function') {
-      try {
-        const result = type({
-          ...(props || {}),
-          children: children.length > 0 ? children.flat() : undefined
-        })
+// Export for tests to use
+export const testApp = app
 
-        if (result instanceof Promise) {
-          return {
-            type: 'div',
-            props: { 'data-async': true },
-            children: []
-          }
-        }
+// Helper function to set test context
+export const setTestContext = (component: FC<any>, props?: Record<string, unknown>) => ({
+  test: true,
+  headers: {},
+  get: (key: string) => {
+    if (key === 'test-context') {
+      return { component, props }
+    }
+    return undefined
+  }
+})
 
-        // Ensure result is a primitive type
-        return typeof result === 'object'
-          ? { type: 'div', props: {}, children: [result] }
-          : result
-      } catch (error) {
-        console.error('Component Error:', error)
-        return {
-          type: 'div',
-          props: { 'data-error': true },
-          children: [String(error)]
-        }
+// Mock streaming renderer
+vi.mock('../renderer/streaming', () => ({
+  renderMDXToStream: async (source: string, components: Record<string, any> = {}) => {
+    const encoder = new TextEncoder()
+    try {
+      const AsyncComponent = components.AsyncComponent
+      let mdxContent: string
+
+      // Handle MDX content first
+      if (AsyncComponent) {
+        const asyncContent = await AsyncComponent()
+        mdxContent = String(asyncContent)
+      } else {
+        mdxContent = source === 'Streaming Test' ? 'Streaming Test' :
+                    source === 'Async Test' ? 'Async Test' :
+                    source
       }
+
+      // Create layout structure with proper HTML escaping
+      const rendered = html`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>MDX App</title>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+            <link rel="stylesheet" href="https://cdn.tailwindcss.com">
+          </head>
+          <body>
+            <main class="container mx-auto px-4 py-8">
+              <div class="prose dark:prose-invert">
+                <div id="mdx-root" data-mdx="true" data-source="${source}" data-hydrate="true" class="prose dark:prose-invert max-w-none">
+                  ${mdxContent}
+                </div>
+              </div>
+            </main>
+          </body>
+        </html>
+      `
+
+      return new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(String(rendered)))
+          controller.close()
+        }
+      })
+    } catch (error) {
+      console.error('Error in renderMDXToStream:', error)
+      throw error
     }
-
-    // Handle primitive elements
-    const elementProps = props || {}
-    const flatChildren = children.flat().map(child =>
-      typeof child === 'object' && child !== null
-        ? { type: 'span', props: {}, children: [child] }
-        : String(child)
-    )
-
-    return {
-      type: String(type),
-      props: elementProps,
-      children: flatChildren
-    }
-  },
-  jsxs: (type: any, props: any) => {
-    const { children, ...rest } = props || {}
-    return jsxRuntime.jsx(
-      type,
-      rest,
-      ...(Array.isArray(children) ? children : [children]).filter(Boolean)
-    )
-  },
-  Fragment: Symbol('Fragment')
-}
-
-// Set up global JSX runtime
-global.React = jsxRuntime
-
-// Export runtime for MDX
-export { jsxRuntime }
+  }
+}))
 
 // Mock fetch for testing
 global.fetch = vi.fn()

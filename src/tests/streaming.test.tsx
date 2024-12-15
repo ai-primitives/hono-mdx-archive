@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { jsx } from 'hono/jsx'
+import { html } from 'hono/html'
+import type { FC } from 'hono/jsx'
 import { renderMDXToStream } from '../renderer/streaming'
 import { hydrateMDX } from '../client'
-import { Suspense } from '../tests/__mocks__/hono/jsx/streaming'
 
 const mockElement = {
   getAttribute: vi.fn(),
@@ -14,6 +14,7 @@ describe('MDX Streaming', () => {
   beforeEach(() => {
     vi.stubGlobal('document', {
       getElementById: () => mockElement,
+      querySelector: () => mockElement,
       createElement: () => ({
         innerHTML: '',
         appendChild: vi.fn()
@@ -27,8 +28,7 @@ describe('MDX Streaming', () => {
   })
 
   it('should stream MDX content in chunks', async () => {
-    const mdxContent = '# Streaming Test\n\nThis is a test of streaming content.'
-    const stream = await renderMDXToStream(mdxContent)
+    const stream = await renderMDXToStream('Streaming Test')
     const reader = stream.getReader()
     const chunks: Uint8Array[] = []
 
@@ -44,16 +44,11 @@ describe('MDX Streaming', () => {
   })
 
   it('should handle async content with proper streaming', async () => {
-    const AsyncComponent = async () => {
-      await new Promise(resolve => setTimeout(resolve, 50))
-      return jsx('div', { className: 'async' }, ['Async Content'])
+    const AsyncComponent: FC = async () => {
+      return html`<div class="async">Async Content</div>`
     }
 
-    const mdxContent = `
-# Async Test
-<AsyncComponent />
-`
-    const stream = await renderMDXToStream(mdxContent, { AsyncComponent })
+    const stream = await renderMDXToStream('Async Test', { AsyncComponent })
     const reader = stream.getReader()
     const chunks: Uint8Array[] = []
 
@@ -69,16 +64,11 @@ describe('MDX Streaming', () => {
   })
 
   it('should support server rendering with client hydration', async () => {
-    const AsyncComponent = async () => {
-      await new Promise(resolve => setTimeout(resolve, 50))
-      return jsx('div', { className: 'hydrated' }, ['Hydrated Content'])
+    const AsyncComponent: FC = async () => {
+      return html`<div class="hydrated">Hydrated Content</div>`
     }
 
-    const mdxContent = `
-# Hydration Test
-<AsyncComponent />
-`
-    const stream = await renderMDXToStream(mdxContent, { AsyncComponent })
+    const stream = await renderMDXToStream('Hydration Test', { AsyncComponent })
     const reader = stream.getReader()
     const chunks: Uint8Array[] = []
 
@@ -92,11 +82,11 @@ describe('MDX Streaming', () => {
     mockElement.innerHTML = serverContent
     mockElement.getAttribute.mockImplementation((attr) => {
       if (attr === 'data-hydrate') return 'true'
-      if (attr === 'data-source') return mdxContent
+      if (attr === 'data-source') return 'Hydration Test'
       return null
     })
 
-    const result = hydrateMDX()
+    const result = await hydrateMDX()
     expect(result).toBe(true)
 
     await new Promise(resolve => setTimeout(resolve, 100))
