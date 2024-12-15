@@ -5,7 +5,6 @@ import { Suspense } from 'hono/jsx'
 import { createStreamingRenderer } from '../renderer/streaming'
 import { Layout } from '../components/Layout'
 import { MDXComponent } from '../components/MDXComponent'
-import { compileMDX } from '../utils/mdx'
 import { testApp } from './setup'
 import type { FC } from 'hono/jsx'
 

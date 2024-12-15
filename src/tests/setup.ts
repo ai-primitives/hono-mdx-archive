@@ -1,8 +1,7 @@
 import { vi } from 'vitest'
-import { jsx } from 'hono/jsx'
+import { jsx, Fragment } from 'hono/jsx'
 import { Hono } from 'hono'
 import { jsxRenderer } from 'hono/jsx-renderer'
-import { html } from 'hono/html'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -33,22 +32,23 @@ Object.defineProperty(global, 'crypto', {
   writable: true
 })
 
+// Set up global JSX runtime
+global.React = {
+  createElement: jsx,
+  Fragment
+}
+
 // Set up Hono app with JSX renderer
 const app = new Hono()
 
-// Mock JSX runtime for tests
-const jsxRuntime = {
+app.use('*', jsxRenderer({
+  docType: true,
   jsx: (type, props, ...children) => {
     if (typeof type === 'function') {
       return type({ ...props, children: children.flat() })
     }
-    return html`<${type} ${Object.entries(props || {}).map(([k, v]) => `${k}="${v}"`).join(' ')}>${children.flat().join('')}</${type}>`
+    return jsx(type, props, ...children)
   }
-}
-
-app.use('*', jsxRenderer({
-  docType: true,
-  jsx: jsxRuntime.jsx
 }))
 
 // Create test handler for JSX rendering
@@ -63,12 +63,11 @@ export const testApp = app
 // Mock streaming renderer
 vi.mock('../renderer/streaming', () => ({
   createStreamingRenderer: vi.fn().mockImplementation(async ({ source, components, wrapper, fallback }) => {
-    const encoder = new TextEncoder()
     const content = wrapper ? wrapper(jsx('div', { className: 'mdx-content' }, [source])) : source
-    const rendered = html`<!DOCTYPE html>${content}`
     return new ReadableStream({
       start(controller) {
-        controller.enqueue(encoder.encode(rendered))
+        const encoder = new TextEncoder()
+        controller.enqueue(encoder.encode(`<!DOCTYPE html>${content}`))
         controller.close()
       }
     })
