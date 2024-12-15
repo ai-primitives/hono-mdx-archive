@@ -11,7 +11,7 @@ export default defineConfig({
       jsxImportSource: 'hono/jsx',
       remarkPlugins: [remarkGfm],
       rehypePlugins: [[rehypeRaw, { passThrough: ['mdxJsxFlowElement', 'mdxJsxTextElement'] }], rehypePrism],
-      providerImportSource: false
+      providerImportSource: '@mdx-js/react'
     })
   ],
   test: {

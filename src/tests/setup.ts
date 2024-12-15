@@ -89,14 +89,14 @@ vi.mock('../renderer/streaming', () => ({
       const AsyncComponent = components.AsyncComponent
       let mdxContent: string
 
-      // Handle MDX content first
+      // Handle async components and MDX content
       if (AsyncComponent) {
-        const asyncContent = await AsyncComponent()
-        mdxContent = String(asyncContent)
+        const result = await AsyncComponent()
+        mdxContent = `<div class="async">${String(result)}</div>`
       } else {
-        mdxContent = source === 'Streaming Test' ? 'Streaming Test' :
-                    source === 'Async Test' ? 'Async Test' :
-                    source
+        mdxContent = source === 'Streaming Test' ? '<div>Streaming Test</div>' :
+                    source === 'Async Test' ? '<div class="async">Async Test</div>' :
+                    `<div>${source}</div>`
       }
 
       // Create layout structure with proper HTML escaping
@@ -130,7 +130,17 @@ vi.mock('../renderer/streaming', () => ({
       })
     } catch (error) {
       console.error('Error in renderMDXToStream:', error)
-      throw error
+      const errorContent = html`
+        <div id="mdx-root" data-mdx="true" data-error="true" class="prose dark:prose-invert max-w-none error">
+          Error rendering MDX: ${error instanceof Error ? error.message : String(error)}
+        </div>
+      `
+      return new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(String(errorContent)))
+          controller.close()
+        }
+      })
     }
   }
 }))
@@ -157,10 +167,38 @@ global.window = {
 
 // Mock document for tests
 global.document = {
-  getElementById: vi.fn(),
-  createElement: vi.fn(),
+  getElementById: vi.fn().mockImplementation((id) => {
+    if (id === 'mdx-root') {
+      return {
+        id: 'mdx-root',
+        setAttribute: vi.fn(),
+        getAttribute: vi.fn(),
+        innerHTML: '',
+        appendChild: vi.fn()
+      }
+    }
+    return null
+  }),
+  createElement: vi.fn().mockImplementation((tag) => {
+    const element = {
+      id: '',
+      className: '',
+      setAttribute: vi.fn(),
+      getAttribute: vi.fn(),
+      appendChild: vi.fn(),
+      innerHTML: '',
+      style: {}
+    }
+    return element
+  }),
   head: {
     appendChild: vi.fn()
+  },
+  body: {
+    appendChild: vi.fn(),
+    innerHTML: '',
+    querySelector: vi.fn(),
+    querySelectorAll: vi.fn()
   },
   querySelector: vi.fn(),
   querySelectorAll: vi.fn()

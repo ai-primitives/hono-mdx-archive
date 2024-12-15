@@ -1,4 +1,4 @@
-import { HtmlEscapedCallbackPhase, type HtmlEscapedString, type HtmlEscapedCallback } from 'hono/utils/html'
+import { HtmlEscapedCallbackPhase, type HtmlEscapedString } from 'hono/utils/html'
 import type { JSXNode, Child, FC } from 'hono/jsx'
 
 type SuspenseProps = {
@@ -6,61 +6,70 @@ type SuspenseProps = {
   children: Child
 }
 
-const stringifyJSXNode = async (node: JSXNode | HtmlEscapedString | string): Promise<string> => {
-  if (node === null || node === undefined) return ''
-  if (typeof node === 'string') {
-    return `<div data-mdx="true" data-hydrate="true" data-source="${node}">${node}</div>`
-  }
-  if ('toString' in node && typeof node.toString === 'function') {
-    const result = node.toString()
-    return typeof result === 'string' ? result : await result
+type CallbackPhase = (typeof HtmlEscapedCallbackPhase)[keyof typeof HtmlEscapedCallbackPhase]
+
+interface StreamingJSXNode extends JSXNode {
+  callbacks?: ((opts: {
+    phase: CallbackPhase
+    buffer?: [string]
+    context: Readonly<object>
+  }) => Promise<string>)[]
+}
+
+const stringifyJSXNode = (node: JSXNode | StreamingJSXNode): string => {
+  if (!node || typeof node !== 'object') {
+    return String(node || '')
   }
 
-  const { tag, props, children } = node as JSXNode
-  const attributes: string[] = []
-
-  if (props) {
-    for (const [key, value] of Object.entries(props)) {
-      if (key === 'children') continue
-      if (value === true) {
-        attributes.push(key)
-      } else if (typeof value === 'string' || typeof value === 'number') {
-        if (key === 'className') {
-          attributes.push(`class="${value}"`)
-        } else if (key.startsWith('data-')) {
-          attributes.push(`${key}="${value}"`)
-        } else {
-          attributes.push(`${key}="${value}"`)
-        }
+  if (typeof node.tag === 'function') {
+    try {
+      const Component = node.tag
+      const result = Component(node.props || {})
+      if (result instanceof Promise) {
+        return '<div data-async="true">Loading...</div>'
       }
+      return String(result)
+    } catch (error) {
+      console.error('Error in functional component:', error)
+      return `<div data-error="true">Error: ${error instanceof Error ? error.message : String(error)}</div>`
     }
   }
 
-  const processedChildren = await Promise.all(
-    (Array.isArray(children) ? children : [children])
-      .filter(child => child != null)
-      .map(async child => {
-        if (typeof child === 'string') return child
-        if (typeof child === 'number' || typeof child === 'boolean') return String(child)
-        if (child && typeof child === 'object' && 'toString' in child && typeof child.toString === 'function') {
-          const result = child.toString()
-          return typeof result === 'string' ? result : await result
-        }
+  const tag = String(node.tag)
+  const props = node.props || {}
+
+  const propsString = Object.entries(props)
+    .filter(([key]) => key !== 'children')
+    .map(([key, value]) => {
+      if (value === true) return key
+      if (value === false || value == null) return ''
+      if (key === 'className') key = 'class'
+      if (key === 'htmlFor') key = 'for'
+      return `${key}="${String(value).replace(/"/g, '&quot;')}"`
+    })
+    .filter(Boolean)
+    .join(' ')
+
+  const processedChildren = (Array.isArray(node.children) ? node.children : [node.children])
+    .filter(child => child != null)
+    .map(child => {
+      if (typeof child === 'object' && 'tag' in child) {
         return stringifyJSXNode(child as JSXNode)
-      })
-  )
+      }
+      return String(child)
+    })
+    .join('')
 
-  const childrenString = processedChildren.join('')
-  const attributeString = attributes.length ? ' ' + attributes.join(' ') : ''
+  const voidElements = new Set([
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+    'link', 'meta', 'param', 'source', 'track', 'wbr'
+  ])
 
-  if (typeof tag === 'function') {
-    const Component = tag as FC
-    const result = await Component(props || {})
-    if (result === null) return ''
-    return stringifyJSXNode(result)
+  if (voidElements.has(tag.toLowerCase())) {
+    return `<${tag}${propsString ? ' ' + propsString : ''}>`
   }
 
-  return `<${tag}${attributeString}>${childrenString}</${tag}>`
+  return `<${tag}${propsString ? ' ' + propsString : ''}>${processedChildren}</${tag}>`
 }
 
 export const Suspense: FC<SuspenseProps> = ({ children, fallback }) => {
@@ -70,7 +79,7 @@ export const Suspense: FC<SuspenseProps> = ({ children, fallback }) => {
     }
 
     if (typeof node === 'string') {
-      return `<div data-mdx="true" data-hydrate="true" data-source="${node}">${node}</div>`
+      return node
     }
 
     if (typeof node === 'number' || typeof node === 'boolean') {
@@ -89,7 +98,7 @@ export const Suspense: FC<SuspenseProps> = ({ children, fallback }) => {
 
     if (typeof node === 'function') {
       try {
-        const result = await (node as () => Promise<unknown>)()
+        const result = await node()
         return processNode(result)
       } catch (error) {
         console.error('Error in async component:', error)
@@ -97,17 +106,28 @@ export const Suspense: FC<SuspenseProps> = ({ children, fallback }) => {
       }
     }
 
-    if (node && typeof node === 'object') {
-      return stringifyJSXNode(node as JSXNode)
+    if (node && typeof node === 'object' && 'tag' in node) {
+      const jsxNode = node as JSXNode
+      if (typeof jsxNode.tag === 'function') {
+        try {
+          const Component = jsxNode.tag
+          const result = await Component(jsxNode.props || {})
+          return String(result)
+        } catch (error) {
+          console.error('Error in async component:', error)
+          return `<div data-error="true">Error: ${error instanceof Error ? error.message : String(error)}</div>`
+        }
+      }
+      return stringifyJSXNode(jsxNode)
     }
 
-    return ''
+    return String(node || '')
   }
 
   const renderContent = async () => {
     try {
       const content = await processNode(children)
-      return `<div data-mdx="true" data-hydrate="true" data-source="${content}">${content}</div>`
+      return `<div data-mdx="true" data-hydrate="true">${content}</div>`
     } catch (error) {
       console.error('Error in Suspense content:', error)
       return `<div data-error="true">Error: ${error instanceof Error ? error.message : String(error)}</div>`
@@ -116,100 +136,73 @@ export const Suspense: FC<SuspenseProps> = ({ children, fallback }) => {
 
   const renderFallback = async () => {
     const content = await processNode(fallback || 'Loading...')
-    return `<div data-mdx="true">${content}</div>`
+    return `<div data-fallback="true">${content}</div>`
   }
-
-  let fallbackContent = '<div data-mdx="true">Loading...</div>'
 
   const result = {
     isEscaped: true,
-    toString() {
-      return fallbackContent
-    }
-  } as HtmlEscapedString
-
-  if (result.callbacks === undefined) {
-    result.callbacks = [
-      async ({ phase }) => {
+    toString: () => 'Loading...',
+    callbacks: [
+      async ({ phase, buffer = [''], context = {} }) => {
         if (phase === HtmlEscapedCallbackPhase.Stringify) {
-          fallbackContent = await renderFallback()
-          return fallbackContent
+          const content = await renderFallback()
+          buffer[0] = content
+          return content
         }
         if (phase === HtmlEscapedCallbackPhase.Stream) {
           try {
             const content = await renderContent()
+            buffer[0] = content
             return content
           } catch (error) {
             console.error('Error in Suspense callback:', error)
-            return `<div data-error="true">Error: ${error instanceof Error ? error.message : String(error)}</div>`
+            const errorContent = `<div data-error="true">Error: ${error instanceof Error ? error.message : String(error)}</div>`
+            buffer[0] = errorContent
+            return errorContent
           }
         }
-        return fallbackContent
+        return buffer[0]
       }
     ]
-  }
+  } as HtmlEscapedString
 
   return result
 }
 
-export const renderToReadableStream = async (node: JSXNode | string): Promise<ReadableStream> => {
+export const renderToReadableStream = async (node: JSXNode | StreamingJSXNode | string): Promise<ReadableStream> => {
   const reader = {
     async start(controller: ReadableStreamDefaultController) {
       try {
-        const wrapWithLayout = async (content: string) => {
-          return `
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MDX App</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css" />
-    <link rel="stylesheet" href="https://cdn.tailwindcss.com" />
-  </head>
-  <body>
-    <main class="container mx-auto px-4 py-8">
-      <div class="prose dark:prose-invert">
-        ${content}
-      </div>
-    </main>
-  </body>
-</html>`
-        }
+        let content: string
+        if (typeof node === 'string') {
+          content = node
+        } else {
+          content = stringifyJSXNode(node)
 
-        let stringContent = typeof node === 'string'
-          ? `<div data-mdx="true" data-hydrate="true" data-source="${node}">${node}</div>`
-          : await stringifyJSXNode(node)
-
-        // Wrap content with Layout if not already wrapped
-        const finalContent = stringContent.includes('<!DOCTYPE html>')
-          ? stringContent
-          : await wrapWithLayout(stringContent)
-
-        // Process callbacks in order
-        const processCallbackChain = async () => {
-          if (typeof node === 'string' || !('callbacks' in node)) return finalContent
-
-          const callbacks = (node as unknown as { callbacks: HtmlEscapedCallback[] }).callbacks || []
-          let resolved = finalContent
-
-          for (const callback of callbacks) {
-            const result = await callback({
-              phase: HtmlEscapedCallbackPhase.Stream,
-              context: {}
-            })
-            if (result) resolved = result
+          if ('callbacks' in node && Array.isArray(node.callbacks)) {
+            const buffer: [string] = [content]
+            for (const callback of node.callbacks) {
+              const result = await callback({
+                phase: HtmlEscapedCallbackPhase.Stream,
+                buffer,
+                context: {}
+              })
+              if (result) {
+                content = String(result)
+              }
+            }
           }
-
-          return resolved
         }
 
-        const processedContent = await processCallbackChain()
-        controller.enqueue(new TextEncoder().encode(processedContent))
+        const encoder = new TextEncoder()
+        controller.enqueue(encoder.encode('<!DOCTYPE html>\n'))
+        controller.enqueue(encoder.encode(content))
         controller.close()
       } catch (error) {
-        console.error('Error in stream:', error)
-        controller.enqueue(new TextEncoder().encode(`<div data-error="true">Error: ${error instanceof Error ? error.message : String(error)}</div>`))
+        console.error('Error in renderToReadableStream:', error)
+        controller.enqueue(new TextEncoder().encode(
+          `<div data-error="true">Error: ${error instanceof Error ? error.message : String(error)}</div>`
+        ))
         controller.close()
       }
     }

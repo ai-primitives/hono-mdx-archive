@@ -16,26 +16,21 @@ export async function createStreamingRenderer({ source, components = {}, fallbac
   const defaultFallback = jsx('div', { className: 'loading' }, 'Loading MDX content...')
 
   try {
-    // Create MDX content with proper JSX structure
-    const mdxContent = typeof source === 'string'
-      ? jsx('div', { 'data-mdx': 'true', 'data-hydrate': 'true', 'data-source': source }, source)
-      : jsx(MDXComponent, { source, components, 'data-mdx': 'true', 'data-hydrate': 'true' })
+    const mdxContent = await MDXComponent({ source, components, hydrate: true })
 
-    // Create the component tree without type casting
-    const app = jsx(Layout, {
-      children: jsx(ErrorBoundary, {
-        onError: (error: Error) => jsx('div', {
-          className: 'error',
-          'data-error': 'true'
-        }, `Error: ${error.message}`),
-        children: jsx(Suspense, {
-          fallback: fallback || defaultFallback,
-          children: mdxContent
-        })
+    const errorBoundary = jsx(ErrorBoundary, {
+      onError: (error: Error) => jsx('div', {
+        className: 'error',
+        'data-error': 'true'
+      }, `Error: ${error.message}`),
+      children: jsx(Suspense, {
+        fallback: fallback || defaultFallback,
+        children: String(mdxContent)
       })
     })
 
-    // Create the stream
+    const app = jsx(Layout, {}, String(errorBoundary))
+
     const stream = await renderToReadableStream(app)
     if (!(stream instanceof ReadableStream)) {
       throw new Error('Failed to create ReadableStream')

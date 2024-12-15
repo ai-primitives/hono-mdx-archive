@@ -1,13 +1,20 @@
 import { jsx } from 'hono/jsx'
-import { compile } from '@mdx-js/mdx'
+import { compile, type CompileOptions } from '@mdx-js/mdx'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import type { FC, Child, JSXNode } from 'hono/jsx'
-import type { ComponentType } from '../types'
+import type { HtmlEscapedString } from 'hono/utils/html'
+import type { ComponentType, HonoComponent } from '../types'
 
 const components: Record<string, ComponentType> = {}
 
-export function registerComponent(name: string, component: ComponentType) {
+interface MDXModule {
+  default: (props: { components: Record<string, ComponentType> }) => Promise<string | HtmlEscapedString>
+}
+
+export function registerComponent(name: string, component: HonoComponent): void {
+  if (!component.displayName) {
+    component.displayName = name
+  }
   components[name] = component
 }
 
@@ -15,19 +22,23 @@ export function getComponents(): Record<string, ComponentType> {
   return components
 }
 
-export async function hydrateMDX(): Promise<boolean> {
+export async function hydrateMDX(rootId = 'mdx-root'): Promise<boolean> {
   try {
-    const root = document.querySelector('[data-mdx="true"]')
+    console.log('Starting hydration for rootId:', rootId)
+    const root = document.querySelector(`#${rootId}, [data-mdx="true"]`)
     if (!root || root.getAttribute('data-hydrate') !== 'true') {
-      return Promise.resolve(false)
+      console.log('No root element found or hydration not enabled')
+      return false
     }
 
     const source = root.getAttribute('data-source')
     if (!source) {
-      return Promise.resolve(false)
+      console.log('No source found in root element')
+      return false
     }
+    console.log('Found source:', source)
 
-    const options = {
+    const options: CompileOptions = {
       jsx: true,
       jsxImportSource: 'hono/jsx',
       remarkPlugins: [remarkGfm],
@@ -35,27 +46,57 @@ export async function hydrateMDX(): Promise<boolean> {
       development: process.env.NODE_ENV === 'development'
     }
 
-    let content: string
-    if (typeof source === 'object' && source !== null) {
-      content = String(source)
-    } else {
+    try {
+      console.log('Compiling MDX source...')
       const result = String(await compile(source, options))
-      const AsyncComponent = new Function('jsx', `
-        const { Fragment } = { Fragment: Symbol('Fragment') };
-        ${result}
-        return MDXContent;
-      `)
-      const element = await Promise.resolve(AsyncComponent(jsx))
-      content = String(element)
-    }
+      console.log('Compiled result:', result)
 
-    if (content) {
-      root.innerHTML = content
-      return Promise.resolve(true)
+      const createMDXModule = new Function('jsx', 'components', `
+        const Fragment = Symbol('Fragment');
+        ${result}
+        return { default: MDXContent };
+      `)
+
+      console.log('Available components:', Object.keys(components))
+      const mdxModule = createMDXModule(jsx, components) as MDXModule
+      console.log('MDX module created')
+
+      const rendered = await mdxModule.default({ components })
+      console.log('Rendered content:', String(rendered))
+
+      if (rendered) {
+        const content = String(rendered)
+        console.log('Setting innerHTML:', content)
+        root.innerHTML = content
+
+        Object.values(components).forEach(component => {
+          if (typeof component === 'function' && 'displayName' in component) {
+            const elements = root.querySelectorAll(`[data-component="${component.displayName}"]`)
+            elements.forEach(element => {
+              const props = JSON.parse(element.getAttribute('data-props') || '{}')
+              const result = (component as HonoComponent)(props)
+              if (result instanceof Promise) {
+                result.then(content => {
+                  element.innerHTML = String(content)
+                })
+              } else {
+                element.innerHTML = String(result)
+              }
+            })
+          }
+        })
+
+        return true
+      }
+
+      console.log('No content to render')
+      return false
+    } catch (error) {
+      console.error('MDX compilation failed:', error)
+      return false
     }
-    return Promise.resolve(false)
   } catch (error) {
     console.error('Hydration failed:', error)
-    return Promise.resolve(false)
+    return false
   }
 }

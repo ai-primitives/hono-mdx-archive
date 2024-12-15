@@ -1,7 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { jsx } from 'hono/jsx'
 import type { FC, PropsWithChildren } from 'hono/jsx'
-import { Suspense } from 'hono/jsx/streaming'
 import { Fragment } from 'hono/jsx'
 import Layout from './Layout'
 import type { CompileOptions } from '@mdx-js/mdx'
@@ -62,35 +61,34 @@ export const MDXComponent = async ({ source, components = {}, hydrate = false }:
     const shouldHydrate = !isTestEnv && (hydrate || typeof window !== 'undefined')
     const serializedState = shouldHydrate ? serializeState({ source, ...components }, components as Record<string, ReactComponentType>) : undefined
 
-    const layout = jsx(Layout, {}, [
-      jsx('div', {
-        id: 'mdx-root',
-        'data-mdx': true,
-        'data-hydrate': shouldHydrate,
-        'data-source': typeof source === 'string' ? source : undefined,
-        'data-state': serializedState,
-        className: 'prose dark:prose-invert max-w-none'
-      }, [
-        jsx(Suspense, {
-          fallback: jsx('div', { className: 'loading' }, 'Loading MDX content...')
-        }, [
-          jsx(Component, {
-            components,
-            'data-hydrate': shouldHydrate
-          })
-        ])
-      ])
-    ])
+    const mdxContent = await Component({ components, 'data-hydrate': shouldHydrate })
 
+    const rootContent = html`
+      <div
+        id="mdx-root"
+        data-mdx="true"
+        data-hydrate="${shouldHydrate}"
+        ${typeof source === 'string' ? `data-source="${encodeURIComponent(source)}"` : ''}
+        ${serializedState ? `data-state="${encodeURIComponent(serializedState)}"` : ''}
+        class="prose dark:prose-invert max-w-none"
+      >
+        ${String(mdxContent)}
+      </div>
+    `
+
+    const layout = jsx(Layout, {}, rootContent)
     return html`${String(layout)}`
   } catch (error) {
     console.error('Error rendering MDX:', error)
-    const errorElement = jsx('div', {
-      id: 'mdx-root',
-      'data-mdx': true,
-      'data-error': true,
-      className: 'prose dark:prose-invert max-w-none'
-    }, `Error rendering MDX: ${error instanceof Error ? error.message : String(error)}`)
-    return html`${String(errorElement)}`
+    return html`
+      <div
+        id="mdx-root"
+        data-mdx="true"
+        data-error="true"
+        class="prose dark:prose-invert max-w-none error"
+      >
+        Error rendering MDX: ${error instanceof Error ? error.message : String(error)}
+      </div>
+    `
   }
 }
