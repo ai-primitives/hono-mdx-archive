@@ -7,6 +7,8 @@ import type { FC } from 'hono/jsx'
 import type { Context } from 'hono'
 import type { ComponentType } from '../components/MDXComponent'
 import { html } from 'hono/html'
+import type { HtmlEscapedString } from 'hono/utils/html'
+import Layout from '../components/Layout'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -88,17 +90,31 @@ vi.mock('../renderer/streaming', () => ({
     const encoder = new TextEncoder()
     try {
       const AsyncComponent = components.AsyncComponent
-      const content = AsyncComponent
-        ? await AsyncComponent({})
-        : html`${jsx('div', {
-            id: 'mdx-root',
-            'data-mdx': true,
-            className: 'prose dark:prose-invert max-w-none'
-          }, source)}`
+      let content: HtmlEscapedString
+      if (AsyncComponent) {
+        const asyncContent = await AsyncComponent({})
+        if (!asyncContent) throw new Error('AsyncComponent returned null')
+        content = asyncContent
+      } else {
+        const element = jsx('div', {
+          id: 'mdx-root',
+          'data-mdx': true,
+          className: 'prose dark:prose-invert max-w-none'
+        }, source)
+        const elementStr = String(element)
+        if (!elementStr) throw new Error('Failed to convert JSX to string')
+        content = await Promise.resolve(html`${elementStr}`)
+      }
+
+      // Use Layout component with proper type handling
+      const layout = jsx(Layout, {}, content)
+      const layoutStr = String(layout)
+      if (!layoutStr) throw new Error('Failed to convert Layout to string')
+      const rendered = await Promise.resolve(html`<!DOCTYPE html>${layoutStr}`)
 
       return new ReadableStream({
         start(controller) {
-          controller.enqueue(encoder.encode(String(content)))
+          controller.enqueue(encoder.encode(String(rendered)))
           controller.close()
         }
       })
