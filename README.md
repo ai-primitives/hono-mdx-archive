@@ -30,7 +30,7 @@ description: Build dynamic MDX applications with Hono's JSX renderer, featuring 
   items={[
     {
       title: 'Server-Side Rendering',
-      description: 'Lightning-fast MDX rendering with Hono's built-in JSX renderer'
+      description: 'Lightning-fast MDX rendering with Hono\'s built-in JSX renderer'
     },
     {
       title: 'Streaming & Suspense',
