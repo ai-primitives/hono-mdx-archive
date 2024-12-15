@@ -81,16 +81,50 @@ npx hono-mdx deploy
 import { jsx } from 'hono/jsx'
 import { MDXComponent } from 'hono-mdx'
 
-// Basic usage
+// Basic usage with streaming support
 app.get('/', (c) => {
   return c.jsx(<MDXComponent source={mdxContent} />)
 })
 
-// With Suspense for async content
+// Advanced streaming with Suspense boundaries
 app.get('/async', (c) => {
   return c.jsx(
     <Suspense fallback={<div>Loading...</div>}>
-      <MDXComponent source={asyncMdxContent} />
+      <Layout>
+        <MDXComponent
+          source={asyncMdxContent}
+          components={{
+            // Custom components with proper HTML escaping
+            CustomComponent: ({ children }) => <div className='custom'>{children}</div>
+          }}
+        />
+      </Layout>
+    </Suspense>
+  )
+})
+```
+
+### Streaming Features
+
+The streaming implementation provides:
+- Full JSX children handling with proper HTML escaping
+- Suspense boundary support for async content
+- Layout component integration
+- HtmlEscapedString support for safe content rendering
+- Proper handling of nested async components
+- Automatic content chunking for optimal performance
+
+Example with nested async components:
+
+```jsx
+app.get('/nested', (c) => {
+  return c.jsx(
+    <Suspense fallback={<div>Loading outer...</div>}>
+      <AsyncComponent>
+        <Suspense fallback={<div>Loading inner...</div>}>
+          <MDXComponent source={asyncContent} />
+        </Suspense>
+      </AsyncComponent>
     </Suspense>
   )
 })
