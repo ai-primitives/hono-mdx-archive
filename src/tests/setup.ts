@@ -2,9 +2,7 @@ import { vi } from 'vitest'
 import { jsx } from 'hono/jsx'
 import { Hono } from 'hono'
 import { jsxRenderer } from 'hono/jsx-renderer'
-import { compile } from '@mdx-js/mdx'
-import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
+import { html } from 'hono/html'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -37,8 +35,20 @@ Object.defineProperty(global, 'crypto', {
 
 // Set up Hono app with JSX renderer
 const app = new Hono()
+
+// Mock JSX runtime for tests
+const jsxRuntime = {
+  jsx: (type, props, ...children) => {
+    if (typeof type === 'function') {
+      return type({ ...props, children: children.flat() })
+    }
+    return html`<${type} ${Object.entries(props || {}).map(([k, v]) => `${k}="${v}"`).join(' ')}>${children.flat().join('')}</${type}>`
+  }
+}
+
 app.use('*', jsxRenderer({
-  docType: true
+  docType: true,
+  jsx: jsxRuntime.jsx
 }))
 
 // Create test handler for JSX rendering
@@ -50,87 +60,20 @@ app.get('*', async (c) => {
 // Export for tests to use
 export const testApp = app
 
-// Set up MDX compilation
-global.compileMDX = async (source: string) => {
-  try {
-    const result = await compile(source, {
-      jsx: true,
-      jsxImportSource: 'hono/jsx',
-      development: false,
-      outputFormat: 'function-body',
-      remarkPlugins: [remarkGfm],
-      rehypePlugins: [[rehypeRaw, { passThrough: ['mdxJsxFlowElement', 'mdxJsxTextElement'] }]]
-    })
-    return result.toString()
-  } catch (error) {
-    console.error('MDX Compilation Error:', error)
-    throw error
-  }
-}
-
-// Mock Hono's JSX runtime
-const jsxRuntime = {
-  jsx: (type: any, props: any, ...children: any[]) => {
-    // Handle function components
-    if (typeof type === 'function') {
-      try {
-        const result = type({
-          ...(props || {}),
-          children: children.length > 0 ? children.flat() : undefined
-        })
-
-        if (result instanceof Promise) {
-          return {
-            type: 'div',
-            props: { 'data-async': true },
-            children: []
-          }
-        }
-
-        // Ensure result is a primitive type
-        return typeof result === 'object'
-          ? { type: 'div', props: {}, children: [result] }
-          : result
-      } catch (error) {
-        console.error('Component Error:', error)
-        return {
-          type: 'div',
-          props: { 'data-error': true },
-          children: [String(error)]
-        }
+// Mock streaming renderer
+vi.mock('../renderer/streaming', () => ({
+  createStreamingRenderer: vi.fn().mockImplementation(async ({ source, components, wrapper, fallback }) => {
+    const encoder = new TextEncoder()
+    const content = wrapper ? wrapper(jsx('div', { className: 'mdx-content' }, [source])) : source
+    const rendered = html`<!DOCTYPE html>${content}`
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(rendered))
+        controller.close()
       }
-    }
-
-    // Handle primitive elements
-    const elementProps = props || {}
-    const flatChildren = children.flat().map(child =>
-      typeof child === 'object' && child !== null
-        ? { type: 'span', props: {}, children: [child] }
-        : String(child)
-    )
-
-    return {
-      type: String(type),
-      props: elementProps,
-      children: flatChildren
-    }
-  },
-  jsxs: (type: any, props: any) => {
-    const { children, ...rest } = props || {}
-    return jsxRuntime.jsx(
-      type,
-      rest,
-      ...(Array.isArray(children) ? children : [children]).filter(Boolean)
-    )
-  },
-  Fragment: Symbol('Fragment')
-}
-
-// Set up global JSX runtime
-global.React = jsxRuntime
-
-// Export runtime for MDX
-export { jsxRuntime }
+    })
+  })
+}))
 
 // Mock fetch for testing
 global.fetch = vi.fn()
@@ -209,17 +152,3 @@ global.GitHubAdapter = class GitHubAdapter {
     email: 'test@example.com'
   })
 }
-
-// Mock streaming renderer
-vi.mock('../renderer/streaming', () => ({
-  createStreamingRenderer: vi.fn().mockImplementation(async ({ source, components, wrapper, fallback }) => {
-    const encoder = new TextEncoder()
-    const html = `<!DOCTYPE html>${wrapper ? wrapper(jsx('div', { className: 'mdx-content' }, [source])) : source}`
-    return new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(html))
-        controller.close()
-      }
-    })
-  })
-}))
