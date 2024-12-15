@@ -5,10 +5,9 @@ import { Hono } from 'hono'
 import { jsxRenderer } from 'hono/jsx-renderer'
 import type { FC } from 'hono/jsx'
 import type { Context } from 'hono'
-import type { ComponentType } from '../components/MDXComponent'
 import { html } from 'hono/html'
 import type { HtmlEscapedString } from 'hono/utils/html'
-import Layout from '../components/Layout'
+import type { ComponentType } from '../components/MDXComponent'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -90,27 +89,42 @@ vi.mock('../renderer/streaming', () => ({
     const encoder = new TextEncoder()
     try {
       const AsyncComponent = components.AsyncComponent
-      let content: HtmlEscapedString
+      let mdxContent: HtmlEscapedString
+
+      // Handle MDX content first
       if (AsyncComponent) {
         const asyncContent = await AsyncComponent({})
         if (!asyncContent) throw new Error('AsyncComponent returned null')
-        content = asyncContent
+        mdxContent = asyncContent
       } else {
-        const element = jsx('div', {
-          id: 'mdx-root',
-          'data-mdx': true,
-          className: 'prose dark:prose-invert max-w-none'
-        }, source)
-        const elementStr = String(element)
-        if (!elementStr) throw new Error('Failed to convert JSX to string')
-        content = await Promise.resolve(html`${elementStr}`)
+        // Parse MDX content and wrap in root div
+        mdxContent = await Promise.resolve(html`
+          <div id="mdx-root" data-mdx="true" data-source="${source}" data-hydrate="true" class="prose dark:prose-invert max-w-none">
+            ${source}
+          </div>
+        `)
       }
 
-      // Use Layout component with proper type handling
-      const layout = jsx(Layout, {}, content)
-      const layoutStr = String(layout)
-      if (!layoutStr) throw new Error('Failed to convert Layout to string')
-      const rendered = await Promise.resolve(html`<!DOCTYPE html>${layoutStr}`)
+      // Create layout structure with proper HTML escaping
+      const rendered = await Promise.resolve(html`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>MDX App</title>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+            <link rel="stylesheet" href="https://cdn.tailwindcss.com">
+          </head>
+          <body>
+            <main class="container mx-auto px-4 py-8">
+              <div class="prose dark:prose-invert">
+                ${mdxContent}
+              </div>
+            </main>
+          </body>
+        </html>
+      `)
 
       return new ReadableStream({
         start(controller) {

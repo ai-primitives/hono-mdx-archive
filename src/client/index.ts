@@ -1,5 +1,4 @@
 import { jsx } from 'hono/jsx'
-import type { ComponentType } from '../components/MDXComponent'
 import { compile } from '@mdx-js/mdx'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
@@ -8,12 +7,12 @@ export async function hydrateMDX(): Promise<boolean> {
   try {
     const root = document.querySelector('[data-mdx="true"]')
     if (!root || root.getAttribute('data-hydrate') !== 'true') {
-      return false
+      return Promise.resolve(false)
     }
 
     const source = root.getAttribute('data-source')
     if (!source) {
-      return false
+      return Promise.resolve(false)
     }
 
     const options = {
@@ -30,15 +29,15 @@ export async function hydrateMDX(): Promise<boolean> {
       ${result}
       return MDXContent;
     `)
-    const element = await AsyncComponent(jsx)
 
+    const element = await Promise.resolve(AsyncComponent(jsx))
     if (element) {
       root.innerHTML = String(element)
-      return true
+      return Promise.resolve(true)
     }
-    return false
+    return Promise.resolve(false)
   } catch (error) {
     console.error('Hydration failed:', error)
-    return false
+    return Promise.resolve(false)
   }
 }
