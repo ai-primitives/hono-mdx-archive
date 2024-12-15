@@ -52,33 +52,43 @@ global.compileMDX = async (source: string) => {
 }
 
 // Mock Hono's JSX runtime
-const Fragment = Symbol('Fragment')
-
 const jsxRuntime = {
   jsx: (type: any, props: any, ...children: any[]) => {
+    if (children.length > 0) {
+      props = { ...props, children: children.flat() }
+    }
+
     if (typeof type === 'function') {
-      return type({ ...props, children: children.flat() })
+      try {
+        const result = type(props)
+        if (result instanceof Promise) {
+          return {
+            type: 'div',
+            props: { 'data-async': true },
+            children: []
+          }
+        }
+        return result
+      } catch (error) {
+        console.error('JSX Runtime Error:', error)
+        return {
+          type: 'div',
+          props: { 'data-error': true },
+          children: [String(error)]
+        }
+      }
     }
+
     return {
-      type,
-      props: props || {},
-      children: children.flat()
-    }
-  },
-  jsxs: (type: any, props: any) => {
-    if (typeof type === 'function') {
-      return type(props)
-    }
-    return {
-      type,
+      type: String(type),
       props: props || {},
       children: props?.children || []
     }
   },
-  Fragment,
-  createElement: function(type: any, props: any, ...children: any[]) {
-    return this.jsx(type, props, ...children)
-  }
+  jsxs: function(type: any, props: any) {
+    return this.jsx(type, props)
+  },
+  Fragment: Symbol('Fragment')
 }
 
 // Set up global JSX runtime
@@ -119,13 +129,16 @@ global.document = {
 } as any
 
 // Mock stream utilities
-global.ReadableStream = class {
+global.ReadableStream = class MockReadableStream {
   constructor(source?: any) {
-    return {
+    const stream = {
       getReader: () => ({
         read: async () => ({ done: true, value: undefined })
-      })
+      }),
+      [Symbol.toStringTag]: 'ReadableStream'
     }
+    Object.setPrototypeOf(stream, ReadableStream.prototype)
+    return stream
   }
 } as any
 

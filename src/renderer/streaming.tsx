@@ -11,25 +11,39 @@ export interface StreamingRendererOptions {
   fallback?: JSX.Element
 }
 
-export async function createStreamingRenderer({ source, components = {}, fallback }: StreamingRendererOptions) {
+export async function createStreamingRenderer({ source, components = {}, fallback }: StreamingRendererOptions): Promise<ReadableStream> {
   const defaultFallback = jsx('div', { className: 'loading' }, ['Loading MDX content...'])
 
-  const content = jsx(
-    ErrorBoundary,
-    {},
-    [
-      jsx(
-        Suspense,
-        { fallback: fallback || defaultFallback },
-        [jsx(MDXComponent, { source, components })]
-      )
-    ]
-  )
+  try {
+    const content = jsx(
+      ErrorBoundary,
+      { onError: (error: Error) => jsx('div', { className: 'error' }, [`Error: ${error.message}`]) },
+      [
+        jsx(
+          Suspense,
+          { fallback: fallback || defaultFallback },
+          [jsx(MDXComponent, { source, components })]
+        )
+      ]
+    )
 
-  return renderToReadableStream(content)
+    const stream = await renderToReadableStream(content)
+    if (!(stream instanceof ReadableStream)) {
+      throw new Error('Failed to create ReadableStream')
+    }
+    return stream
+  } catch (error) {
+    console.error('Streaming Error:', error)
+    return new ReadableStream({
+      start(controller) {
+        const errorContent = `Error streaming MDX: ${error.message}`
+        controller.enqueue(new TextEncoder().encode(errorContent))
+        controller.close()
+      }
+    })
+  }
 }
 
-export async function renderMDXToStream(source: string | Promise<string>, components: Record<string, ComponentType> = {}) {
-  const stream = await createStreamingRenderer({ source, components })
-  return stream
+export async function renderMDXToStream(source: string | Promise<string>, components: Record<string, ComponentType> = {}): Promise<ReadableStream> {
+  return createStreamingRenderer({ source, components })
 }
