@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { jsx } from 'hono/jsx'
-import { renderToString } from 'hono/middleware/jsx-renderer'
+import { renderToString } from 'hono/jsx'
+import { Suspense } from 'hono/jsx'
 import { createStreamingRenderer } from '../renderer/streaming'
 import { Layout } from '../components/Layout'
 import { MDXComponent } from '../components/MDXComponent'
