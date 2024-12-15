@@ -1,5 +1,7 @@
 import { vi } from 'vitest'
 import { jsx } from 'hono/jsx'
+import { Hono } from 'hono'
+import { jsxRenderer } from 'hono/jsx-renderer'
 import { compile } from '@mdx-js/mdx'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
@@ -32,6 +34,16 @@ Object.defineProperty(global, 'crypto', {
   configurable: true,
   writable: true
 })
+
+// Set up Hono app with JSX renderer
+const app = new Hono()
+app.use('*', jsxRenderer())
+
+// Create test handler for JSX rendering
+app.get('*', (c) => c.render(c.req.param('jsx')))
+
+// Export for tests to use
+export const testApp = app
 
 // Set up MDX compilation
 global.compileMDX = async (source: string) => {
@@ -192,3 +204,17 @@ global.GitHubAdapter = class GitHubAdapter {
     email: 'test@example.com'
   })
 }
+
+// Mock streaming renderer
+vi.mock('../renderer/streaming', () => ({
+  createStreamingRenderer: vi.fn().mockImplementation(async ({ source, components, wrapper, fallback }) => {
+    const encoder = new TextEncoder()
+    const content = wrapper ? wrapper(jsx('div', { className: 'mdx-content' }, source)) : source
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(content))
+        controller.close()
+      }
+    })
+  })
+}))
