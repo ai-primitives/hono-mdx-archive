@@ -6,6 +6,7 @@ import { renderToReadableStream } from '../renderer/streaming'
 import { compileMDX } from '../utils/mdx'
 import { MDXCompilationError, MDXRenderError } from '../utils/errors'
 import { Suspense } from 'hono/jsx/streaming'
+import { serializeState } from '../hydration/state'
 
 export interface MDXComponentProps {
   source: string | Promise<string>
@@ -32,14 +33,12 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
 
     const honoJSXRuntime = {
       jsx: (type: any, props: any, ...children: any[]) => {
-        // Handle function components
         if (typeof type === 'function') {
           try {
             const result = type({
               ...(props || {}),
               children: children.length > 0 ? children.flat() : undefined
             })
-            // Ensure result is a primitive type
             return typeof result === 'object' ? jsx('div', {}, result) : result
           } catch (error) {
             console.error('Component Error:', error)
@@ -47,7 +46,6 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
           }
         }
 
-        // Handle primitive elements
         const elementProps = props || {}
         const flatChildren = children.flat().map(child =>
           typeof child === 'object' && child !== null
@@ -88,11 +86,14 @@ export const MDXComponent: FC<MDXComponentProps> = async ({ source, components =
     const isTestEnv = process.env.NODE_ENV === 'test'
     const shouldHydrate = !isTestEnv && (hydrate || typeof window !== 'undefined')
 
+    const serializedState = shouldHydrate ? serializeState({ source, ...components }, components) : undefined
+
     const element = jsx('div', {
       id: 'mdx-root',
       'data-mdx': true,
       'data-hydrate': shouldHydrate,
       'data-source': typeof source === 'string' ? source : undefined,
+      'data-state': serializedState,
       className: 'prose dark:prose-invert max-w-none'
     }, [
       jsx(Suspense, {
