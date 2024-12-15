@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import { jsx, Fragment } from 'hono/jsx'
+import { jsx } from 'hono/jsx'
 import { Hono } from 'hono'
 import { jsxRenderer } from 'hono/jsx-renderer'
 
@@ -32,38 +32,37 @@ Object.defineProperty(global, 'crypto', {
   writable: true
 })
 
-// Set up global JSX runtime
-global.React = {
-  createElement: jsx,
-  Fragment
-}
-
 // Set up Hono app with JSX renderer
 const app = new Hono()
 
 app.use('*', jsxRenderer({
-  docType: true,
-  jsx: (type, props, ...children) => {
-    if (typeof type === 'function') {
-      return type({ ...props, children: children.flat() })
-    }
-    return jsx(type, props, ...children)
-  }
+  docType: true
 }))
 
 // Create test handler for JSX rendering
-app.get('*', async (c) => {
-  const jsx = c.req.param('jsx')
-  return c.render(jsx)
+app.get('*', (c) => {
+  const { component, props } = c.get('test-context') || {}
+  return component ? c.render(jsx(component, props || {})) : c.render(null)
 })
 
 // Export for tests to use
 export const testApp = app
 
+// Helper function to set test context
+export const setTestContext = (component: any, props?: any) => ({
+  test: true,
+  headers: {},
+  get: (key: string) => {
+    if (key === 'test-context') {
+      return { component, props }
+    }
+  }
+})
+
 // Mock streaming renderer
 vi.mock('../renderer/streaming', () => ({
-  createStreamingRenderer: vi.fn().mockImplementation(async ({ source, components, wrapper, fallback }) => {
-    const content = wrapper ? wrapper(jsx('div', { className: 'mdx-content' }, [source])) : source
+  createStreamingRenderer: vi.fn().mockImplementation(async ({ source, wrapper }) => {
+    const content = wrapper ? wrapper(source) : source
     return new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder()
