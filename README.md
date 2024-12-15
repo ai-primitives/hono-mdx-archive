@@ -258,11 +258,11 @@ npm run build
 
 ## Dependencies
 
-- hono: ^3.0.0
-- esbuild-wasm: ^0.19.0
-- picoCss: ^2.0.0
-- monaco-editor: ^0.45.0
-- @clickhouse/client-web: ^0.2.0
+- hono: ^4.0.0
+- esbuild-wasm: ^0.24.0
+- @picocss/pico: ^2.0.6
+- @monaco-editor/react: ^4.6.0
+- @clickhouse/client-web: ^1.9.1
 
 ## License
 
