@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { jsx } from 'hono/jsx'
-import { renderToString } from 'hono/jsx/dom'
-import { renderToReadableStream } from '../renderer/streaming'
+import { renderToString } from 'hono/middleware/jsx-renderer'
+import { createStreamingRenderer } from '../renderer/streaming'
 import { Layout } from '../components/Layout'
 import { MDXComponent } from '../components/MDXComponent'
 import { compileMDX } from '../utils/mdx'
+import type { FC } from 'hono/jsx'
 
 // Mock MDX compilation
 vi.mock('../utils/mdx', () => ({
@@ -31,7 +32,9 @@ describe('Styling Integration', () => {
   it('should preserve Tailwind classes in MDX content', async () => {
     const mdxContent = '# Hello\n\n<div className="bg-blue-500 text-white p-4">Styled content</div>'
     const rendered = await renderToString(
-      jsx(MDXComponent, { source: mdxContent, hydrate: true })
+      jsx(Layout, {}, [
+        jsx(MDXComponent, { source: mdxContent, hydrate: true })
+      ])
     )
 
     expect(rendered).toContain('prose dark:prose-invert')
@@ -39,11 +42,14 @@ describe('Styling Integration', () => {
     expect(compileMDX).toHaveBeenCalledWith(mdxContent)
   })
 
-  it('should support streaming render with styles', async () => {
+  it('should support streaming render with Suspense', async () => {
     const mdxContent = '# Test'
-    const stream = await renderToReadableStream(
-      jsx(MDXComponent, { source: mdxContent, hydrate: true })
-    )
+    const stream = await createStreamingRenderer({
+      source: mdxContent,
+      components: {},
+      fallback: jsx('div', { className: 'loading' }, ['Loading...'])
+    })
+
     const chunks = []
     const reader = stream.getReader()
 
@@ -58,5 +64,6 @@ describe('Styling Integration', () => {
     expect(rendered).toContain('pico.min.css')
     expect(rendered).toContain('tailwindcss.com')
     expect(rendered).toContain('mdx-content')
+    expect(rendered).toContain('loading')
   })
 })
