@@ -3,16 +3,16 @@
 ## Core Functionality
 
 ### MDX Rendering
-- [ ] Implement MDX parser integration with Hono JSX renderer
-- [ ] Add support for Suspense and streaming
+- [x] Implement MDX parser integration with Hono JSX renderer
+- [x] Add support for Suspense and streaming
 - [ ] Create client-side hydration utilities
 - [ ] Set up default styling with PicoCSS
 - [ ] Add Tailwind CDN integration
 
 ### Build System
-- [ ] Configure esbuild-wasm for browser/worker environments
-- [ ] Implement HTTP URL imports support
-- [ ] Set up Wrangler integration
+- [x] Configure esbuild-wasm for browser/worker environments
+- [x] Implement HTTP URL imports support
+- [x] Set up Wrangler integration
 - [ ] Create production build pipeline
 - [ ] Add development server with HMR
 
@@ -25,25 +25,22 @@
 
 ## Storage & API
 
-### Workers KV Integration
-- [ ] Create KV namespace management
-- [ ] Implement CRUD operations for MDX content
-- [ ] Add metadata support
+### Storage Integration
+- [x] Set up Cloudflare D1 integration
+- [x] Implement Clickhouse integration with @clickhouse/client-web
+- [x] Create database schema for MDX storage
+- [x] Implement CRUD operations
+- [x] Add metadata support
 - [ ] Implement caching strategy
 - [ ] Add bulk operations support
 
-### Clickhouse Integration
-- [ ] Set up @clickhouse/client-web
-- [ ] Create database schema for MDX storage
-- [ ] Implement CRUD operations
-- [ ] Add query optimization
-- [ ] Create migration utilities
-
 ### API Layer
-- [ ] Design RESTful API endpoints
-- [ ] Implement authentication/authorization
+- [x] Design RESTful API endpoints
+- [x] Implement authentication/authorization
+- [x] Add GitHub OAuth integration
+- [x] Add password-based authentication
 - [ ] Add rate limiting
-- [ ] Create API documentation
+- [x] Create API documentation
 - [ ] Add API versioning support
 
 ## CLI Tool
@@ -56,31 +53,32 @@
 - [ ] Implement error reporting
 
 ### Build Commands
-- [ ] Create `build` command
-- [ ] Add production optimization
+- [x] Create `build` command
+- [x] Add production optimization
 - [ ] Implement asset handling
 - [ ] Add bundle analysis
 - [ ] Create build caching
 
 ### Deploy Commands
-- [ ] Implement `deploy` command
-- [ ] Add Cloudflare Workers integration
-- [ ] Create environment management
+- [x] Add Cloudflare Workers integration
+- [x] Create environment management
 - [ ] Add deployment validation
 - [ ] Implement rollback functionality
 
 ## Testing & Documentation
 
 ### Testing
-- [ ] Set up testing framework
-- [ ] Add unit tests for core functionality
-- [ ] Create integration tests
+- [x] Set up testing framework
+- [x] Add unit tests for core functionality
+- [x] Create integration tests
+- [x] Add streaming and hydration tests
+- [x] Add authentication tests
 - [ ] Add performance tests
 - [ ] Implement CI/CD pipeline
 
 ### Documentation
-- [ ] Create API documentation
-- [ ] Add usage examples
+- [x] Create API documentation
+- [x] Add usage examples
 - [ ] Create deployment guide
 - [ ] Add troubleshooting guide
 - [ ] Create contributing guidelines
