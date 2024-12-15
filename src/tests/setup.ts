@@ -37,10 +37,15 @@ Object.defineProperty(global, 'crypto', {
 
 // Set up Hono app with JSX renderer
 const app = new Hono()
-app.use('*', jsxRenderer())
+app.use('*', jsxRenderer({
+  docType: true
+}))
 
 // Create test handler for JSX rendering
-app.get('*', (c) => c.render(c.req.param('jsx')))
+app.get('*', async (c) => {
+  const jsx = c.req.param('jsx')
+  return c.render(jsx)
+})
 
 // Export for tests to use
 export const testApp = app
@@ -209,10 +214,10 @@ global.GitHubAdapter = class GitHubAdapter {
 vi.mock('../renderer/streaming', () => ({
   createStreamingRenderer: vi.fn().mockImplementation(async ({ source, components, wrapper, fallback }) => {
     const encoder = new TextEncoder()
-    const content = wrapper ? wrapper(jsx('div', { className: 'mdx-content' }, source)) : source
+    const html = `<!DOCTYPE html>${wrapper ? wrapper(jsx('div', { className: 'mdx-content' }, [source])) : source}`
     return new ReadableStream({
       start(controller) {
-        controller.enqueue(encoder.encode(content))
+        controller.enqueue(encoder.encode(html))
         controller.close()
       }
     })

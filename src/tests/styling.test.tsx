@@ -22,8 +22,9 @@ describe('Styling Integration', () => {
   })
 
   it('should include PicoCSS and Tailwind in Layout', async () => {
-    const res = await testApp.request('/')
-      .transform(jsx(Layout, {}, [jsx('div', {}, ['Test Content'])]))
+    const res = await testApp.request('/', {
+      param: { jsx: jsx(Layout, {}, [jsx('div', {}, ['Test Content'])]) }
+    })
 
     const html = await res.text()
     expect(html).toContain('pico.min.css')
@@ -33,10 +34,13 @@ describe('Styling Integration', () => {
 
   it('should preserve Tailwind classes in MDX content', async () => {
     const mdxContent = '# Hello\n\n<div className="bg-blue-500 text-white p-4">Styled content</div>'
-    const res = await testApp.request('/')
-      .transform(jsx(Layout, {}, [
-        jsx(MDXComponent, { source: mdxContent, hydrate: true })
-      ]))
+    const res = await testApp.request('/', {
+      param: {
+        jsx: jsx(Layout, {}, [
+          jsx(MDXComponent, { source: mdxContent, hydrate: true })
+        ])
+      }
+    })
 
     const html = await res.text()
     expect(html).toContain('prose dark:prose-invert')
