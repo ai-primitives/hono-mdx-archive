@@ -54,13 +54,14 @@ global.compileMDX = async (source: string) => {
 // Mock Hono's JSX runtime
 const jsxRuntime = {
   jsx: (type: any, props: any, ...children: any[]) => {
-    if (children.length > 0) {
-      props = { ...props, children: children.flat() }
-    }
-
+    // Handle function components
     if (typeof type === 'function') {
       try {
-        const result = type(props)
+        const result = type({
+          ...(props || {}),
+          children: children.length > 0 ? children.flat() : undefined
+        })
+
         if (result instanceof Promise) {
           return {
             type: 'div',
@@ -68,9 +69,13 @@ const jsxRuntime = {
             children: []
           }
         }
-        return result
+
+        // Ensure result is a primitive type
+        return typeof result === 'object'
+          ? { type: 'div', props: {}, children: [result] }
+          : result
       } catch (error) {
-        console.error('JSX Runtime Error:', error)
+        console.error('Component Error:', error)
         return {
           type: 'div',
           props: { 'data-error': true },
@@ -79,14 +84,27 @@ const jsxRuntime = {
       }
     }
 
+    // Handle primitive elements
+    const elementProps = props || {}
+    const flatChildren = children.flat().map(child =>
+      typeof child === 'object' && child !== null
+        ? { type: 'span', props: {}, children: [child] }
+        : String(child)
+    )
+
     return {
       type: String(type),
-      props: props || {},
-      children: props?.children || []
+      props: elementProps,
+      children: flatChildren
     }
   },
-  jsxs: function(type: any, props: any) {
-    return this.jsx(type, props)
+  jsxs: (type: any, props: any) => {
+    const { children, ...rest } = props || {}
+    return jsxRuntime.jsx(
+      type,
+      rest,
+      ...(Array.isArray(children) ? children : [children]).filter(Boolean)
+    )
   },
   Fragment: Symbol('Fragment')
 }
@@ -149,20 +167,28 @@ global.TextEncoder = class {
 } as any
 
 global.TextDecoder = class {
-  decode(buffer: Uint8Array) {
-    return String.fromCharCode.apply(null, Array.from(buffer))
+  decode(buffer: Uint8Array | undefined) {
+    if (!buffer) return ''
+    const arr = Array.from(buffer)
+    return arr.map(byte => String.fromCharCode(byte)).join('')
   }
 } as any
 
 // Mock GitHubAdapter
-class GitHubAdapter {
-  constructor(config: any) {
-    return {
-      authorize: vi.fn(),
-      callback: vi.fn(),
-      profile: vi.fn()
-    }
-  }
-}
+global.GitHubAdapter = class GitHubAdapter {
+  clientId: string
+  clientSecret: string
 
-global.GitHubAdapter = GitHubAdapter
+  constructor(config: { clientId: string; clientSecret: string }) {
+    this.clientId = config.clientId
+    this.clientSecret = config.clientSecret
+  }
+
+  authenticate = vi.fn().mockResolvedValue({ id: 'test-user' })
+  validateToken = vi.fn().mockResolvedValue(true)
+  getProfile = vi.fn().mockResolvedValue({
+    id: 'test-user',
+    name: 'Test User',
+    email: 'test@example.com'
+  })
+}

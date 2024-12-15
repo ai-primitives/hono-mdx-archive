@@ -1,8 +1,9 @@
-import { jsx } from 'hono/jsx'
-import type { FC, ComponentType } from 'react'
-import { compile, type CompileOptions } from '@mdx-js/mdx'
-import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
+import { jsx, Fragment } from 'hono/jsx'
+import { createElement } from 'hono/jsx/dom'
+import type { FC } from 'hono/jsx'
+import { renderToString } from 'hono/jsx/dom'
+import { renderToReadableStream } from '../renderer/streaming'
+import { compileMDX } from '../utils/mdx'
 import { MDXCompilationError, MDXRenderError } from '../utils/errors'
 import { Suspense } from 'hono/jsx/streaming'
 
@@ -29,6 +30,44 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
     const { toString } = await compile(mdxSource, options)
     const compiledCode = toString()
 
+    const honoJSXRuntime = {
+      jsx: (type: any, props: any, ...children: any[]) => {
+        // Handle function components
+        if (typeof type === 'function') {
+          try {
+            const result = type({
+              ...(props || {}),
+              children: children.length > 0 ? children.flat() : undefined
+            })
+            // Ensure result is a primitive type
+            return typeof result === 'object' ? jsx('div', {}, result) : result
+          } catch (error) {
+            console.error('Component Error:', error)
+            return jsx('div', { 'data-error': true }, String(error))
+          }
+        }
+
+        // Handle primitive elements
+        const elementProps = props || {}
+        const flatChildren = children.flat().map(child =>
+          typeof child === 'object' && child !== null
+            ? jsx('span', {}, child)
+            : String(child)
+        )
+
+        return jsx(String(type), elementProps, ...flatChildren)
+      },
+      Fragment: Symbol('Fragment'),
+      jsxs: (type: any, props: any) => {
+        const { children, ...rest } = props || {}
+        return jsx(
+          type,
+          rest,
+          ...(Array.isArray(children) ? children : [children]).filter(Boolean)
+        )
+      }
+    }
+
     const createComponent = new Function('_runtime', '_components', `
       const { jsx, Fragment, jsxs } = _runtime;
       const components = _components || {};
@@ -36,21 +75,7 @@ async function compileMDX(source: string | Promise<string>, components: Record<s
       return MDXContent;
     `)
 
-    const Component = createComponent(
-      {
-        jsx: (type: any, props: any, ...children: any[]) => {
-          if (children.length > 0) {
-            props = { ...props, children }
-          }
-          return jsx(type, props)
-        },
-        Fragment: Symbol('Fragment'),
-        jsxs: (type: any, props: any) => jsx(type, props)
-      },
-      components
-    )
-
-    return Component
+    return createComponent(honoJSXRuntime, components)
   } catch (error) {
     console.error('MDX Compilation Error:', error)
     throw new MDXCompilationError(`Failed to compile MDX: ${error}`)
@@ -63,7 +88,7 @@ export const MDXComponent: FC<MDXComponentProps> = async ({ source, components =
     const isTestEnv = process.env.NODE_ENV === 'test'
     const shouldHydrate = !isTestEnv && (hydrate || typeof window !== 'undefined')
 
-    return jsx('div', {
+    const element = jsx('div', {
       id: 'mdx-root',
       'data-mdx': true,
       'data-hydrate': shouldHydrate,
@@ -72,8 +97,15 @@ export const MDXComponent: FC<MDXComponentProps> = async ({ source, components =
     }, [
       jsx(Suspense, {
         fallback: jsx('div', { className: 'loading' }, ['Loading MDX content...'])
-      }, [jsx(Component, { components })])
+      }, [
+        jsx(Component, {
+          components,
+          'data-hydrate': shouldHydrate
+        })
+      ])
     ])
+
+    return element
   } catch (error) {
     console.error('Error rendering MDX:', error)
     return jsx('div', {
