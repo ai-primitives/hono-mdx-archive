@@ -7,6 +7,7 @@ import { compileMDX } from '../utils/mdx'
 import { MDXCompilationError, MDXRenderError } from '../utils/errors'
 import { Suspense } from 'hono/jsx/streaming'
 import { serializeState } from '../hydration/state'
+import { Layout } from './Layout'
 
 export interface MDXComponentProps {
   source: string | Promise<string>
@@ -88,21 +89,23 @@ export const MDXComponent: FC<MDXComponentProps> = async ({ source, components =
 
     const serializedState = shouldHydrate ? serializeState({ source, ...components }, components) : undefined
 
-    const element = jsx('div', {
-      id: 'mdx-root',
-      'data-mdx': true,
-      'data-hydrate': shouldHydrate,
-      'data-source': typeof source === 'string' ? source : undefined,
-      'data-state': serializedState,
-      className: 'prose dark:prose-invert max-w-none'
-    }, [
-      jsx(Suspense, {
-        fallback: jsx('div', { className: 'loading' }, ['Loading MDX content...'])
+    const element = jsx(Layout, {}, [
+      jsx('div', {
+        id: 'mdx-root',
+        'data-mdx': true,
+        'data-hydrate': shouldHydrate,
+        'data-source': typeof source === 'string' ? source : undefined,
+        'data-state': serializedState,
+        className: 'prose dark:prose-invert max-w-none'
       }, [
-        jsx(Component, {
-          components,
-          'data-hydrate': shouldHydrate
-        })
+        jsx(Suspense, {
+          fallback: jsx('div', { className: 'loading' }, ['Loading MDX content...'])
+        }, [
+          jsx(Component, {
+            components,
+            'data-hydrate': shouldHydrate
+          })
+        ])
       ])
     ])
 
