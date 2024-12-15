@@ -1,5 +1,8 @@
 import { vi } from 'vitest'
 import { jsx } from 'hono/jsx'
+import { compile } from '@mdx-js/mdx'
+import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 
 // Mock crypto for tests
 Object.defineProperty(global, 'crypto', {
@@ -30,24 +33,80 @@ Object.defineProperty(global, 'crypto', {
   writable: true
 })
 
-// Mock Hono's JSX runtime
-const Fragment = Symbol('Fragment')
+// Set up MDX compilation
+global.compileMDX = async (source: string) => {
+  try {
+    const result = await compile(source, {
+      jsx: true,
+      jsxImportSource: 'hono/jsx',
+      development: false,
+      outputFormat: 'function-body',
+      remarkPlugins: [remarkGfm],
+      rehypePlugins: [[rehypeRaw, { passThrough: ['mdxJsxFlowElement', 'mdxJsxTextElement'] }]]
+    })
+    return result.toString()
+  } catch (error) {
+    console.error('MDX Compilation Error:', error)
+    throw error
+  }
+}
 
+// Mock Hono's JSX runtime
 const jsxRuntime = {
   jsx: (type: any, props: any, ...children: any[]) => {
+    // Handle function components
     if (typeof type === 'function') {
-      return type({ ...props, children: children.flat() })
+      try {
+        const result = type({
+          ...(props || {}),
+          children: children.length > 0 ? children.flat() : undefined
+        })
+
+        if (result instanceof Promise) {
+          return {
+            type: 'div',
+            props: { 'data-async': true },
+            children: []
+          }
+        }
+
+        // Ensure result is a primitive type
+        return typeof result === 'object'
+          ? { type: 'div', props: {}, children: [result] }
+          : result
+      } catch (error) {
+        console.error('Component Error:', error)
+        return {
+          type: 'div',
+          props: { 'data-error': true },
+          children: [String(error)]
+        }
+      }
     }
+
+    // Handle primitive elements
+    const elementProps = props || {}
+    const flatChildren = children.flat().map(child =>
+      typeof child === 'object' && child !== null
+        ? { type: 'span', props: {}, children: [child] }
+        : String(child)
+    )
+
     return {
-      type,
-      props: props || {},
-      children: children.flat()
+      type: String(type),
+      props: elementProps,
+      children: flatChildren
     }
   },
-  Fragment,
-  createElement: function(type: any, props: any, ...children: any[]) {
-    return this.jsx(type, props, ...children)
-  }
+  jsxs: (type: any, props: any) => {
+    const { children, ...rest } = props || {}
+    return jsxRuntime.jsx(
+      type,
+      rest,
+      ...(Array.isArray(children) ? children : [children]).filter(Boolean)
+    )
+  },
+  Fragment: Symbol('Fragment')
 }
 
 // Set up global JSX runtime
@@ -88,13 +147,16 @@ global.document = {
 } as any
 
 // Mock stream utilities
-global.ReadableStream = class {
+global.ReadableStream = class MockReadableStream {
   constructor(source?: any) {
-    return {
+    const stream = {
       getReader: () => ({
         read: async () => ({ done: true, value: undefined })
-      })
+      }),
+      [Symbol.toStringTag]: 'ReadableStream'
     }
+    Object.setPrototypeOf(stream, ReadableStream.prototype)
+    return stream
   }
 } as any
 
@@ -105,20 +167,28 @@ global.TextEncoder = class {
 } as any
 
 global.TextDecoder = class {
-  decode(buffer: Uint8Array) {
-    return String.fromCharCode.apply(null, Array.from(buffer))
+  decode(buffer: Uint8Array | undefined) {
+    if (!buffer) return ''
+    const arr = Array.from(buffer)
+    return arr.map(byte => String.fromCharCode(byte)).join('')
   }
 } as any
 
 // Mock GitHubAdapter
-class GitHubAdapter {
-  constructor(config: any) {
-    return {
-      authorize: vi.fn(),
-      callback: vi.fn(),
-      profile: vi.fn()
-    }
-  }
-}
+global.GitHubAdapter = class GitHubAdapter {
+  clientId: string
+  clientSecret: string
 
-global.GitHubAdapter = GitHubAdapter
+  constructor(config: { clientId: string; clientSecret: string }) {
+    this.clientId = config.clientId
+    this.clientSecret = config.clientSecret
+  }
+
+  authenticate = vi.fn().mockResolvedValue({ id: 'test-user' })
+  validateToken = vi.fn().mockResolvedValue(true)
+  getProfile = vi.fn().mockResolvedValue({
+    id: 'test-user',
+    name: 'Test User',
+    email: 'test@example.com'
+  })
+}

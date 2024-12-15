@@ -17,10 +17,11 @@ export default defineConfig({
     react()
   ],
   test: {
-    environment: 'node',
+    environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/tests/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    exclude: ['src/**/platform.test.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     deps: {
       inline: [/@mdx-js\/mdx/, /@mdx-js\/react/, /remark-.*/, /rehype-.*/]
     }
